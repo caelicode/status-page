@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Status</title>
+    <style>
+        :root {
+            --green: #10B981;
+            --green-bg: #ECFDF5;
+            --yellow: #F59E0B;
+            --yellow-bg: #FFFBEB;
+            --red: #EF4444;
+            --red-bg: #FEF2F2;
+            --gray: #6B7280;
+            --gray-bg: #F3F4F6;
+            --bg: #F9FAFB;
+            --card: #FFFFFF;
+            --text: #111827;
+            --text-secondary: #6B7280;
+            --border: #E5E7EB;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                         'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 740px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* ── Banner ─────────────────────────────────────────────── */
+
+        .banner {
+            padding: 44px 0 36px;
+            text-align: center;
+            color: #fff;
+            transition: background-color 0.4s ease;
+        }
+        .banner.operational            { background: var(--green); }
+        .banner.degraded_performance   { background: var(--yellow); color: var(--text); }
+        .banner.major_outage           { background: var(--red); }
+        .banner.unknown                { background: var(--gray); }
+
+        .banner h1 { font-size: 1.4rem; font-weight: 600; margin-bottom: 6px; }
+        .banner p  { font-size: 1.05rem; opacity: 0.92; }
+
+        /* ── Components ─────────────────────────────────────────── */
+
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-secondary);
+            margin: 28px 0 12px;
+        }
+
+        .component {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px 22px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: box-shadow 0.15s;
+        }
+        .component:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+
+        .comp-info { flex: 1; min-width: 0; }
+        .comp-name {
+            font-weight: 600;
+            font-size: 0.925rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .comp-desc {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 1px;
+        }
+
+        .comp-right {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-shrink: 0;
+            margin-left: 16px;
+        }
+
+        .metric {
+            text-align: right;
+        }
+        .metric-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+        }
+        .metric-value {
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 4px 12px 4px 10px;
+            border-radius: 9999px;
+            white-space: nowrap;
+        }
+        .status-badge.operational            { background: var(--green-bg); color: #065F46; }
+        .status-badge.degraded_performance   { background: var(--yellow-bg); color: #92400E; }
+        .status-badge.major_outage           { background: var(--red-bg); color: #991B1B; }
+        .status-badge.unknown                { background: var(--gray-bg); color: #374151; }
+
+        .dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .dot.operational            { background: var(--green); }
+        .dot.degraded_performance   { background: var(--yellow); }
+        .dot.major_outage           { background: var(--red); }
+        .dot.unknown                { background: var(--gray); }
+
+        /* ── Footer ─────────────────────────────────────────────── */
+
+        .footer {
+            text-align: center;
+            padding: 28px 0 52px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        .footer p + p { margin-top: 3px; }
+        .footer a { color: var(--text-secondary); text-decoration: underline; }
+
+        /* ── Loading / empty states ─────────────────────────────── */
+
+        .message {
+            text-align: center;
+            padding: 52px 0;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        /* ── Responsive ─────────────────────────────────────────── */
+
+        @media (max-width: 600px) {
+            .component { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .comp-right { margin-left: 0; width: 100%; justify-content: space-between; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="banner" class="banner unknown">
+    <div class="container">
+        <h1>System Status</h1>
+        <p id="banner-text">Loading&hellip;</p>
+    </div>
+</div>
+
+<div class="container">
+    <p class="section-label">Current status</p>
+    <div id="components">
+        <div class="message">Loading status&hellip;</div>
+    </div>
+
+    <div class="footer">
+        <p>Last updated <span id="last-updated">&mdash;</span></p>
+        <p>Refreshes automatically every 60 seconds</p>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var OVERALL_LABELS = {
+        operational:          'All Systems Operational',
+        degraded_performance: 'Some Systems Experiencing Issues',
+        major_outage:         'Major Service Outage',
+        unknown:              'Status Unknown'
+    };
+
+    var COMPONENT_LABELS = {
+        operational:          'Operational',
+        degraded_performance: 'Degraded',
+        major_outage:         'Outage',
+        unknown:              'Unknown'
+    };
+
+    function escapeHtml(str) {
+        var el = document.createElement('span');
+        el.textContent = str;
+        return el.innerHTML;
+    }
+
+    function timeAgo(iso) {
+        if (!iso) return '\u2014';
+        var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+        if (diff < 60)    return 'just now';
+        if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+        return Math.floor(diff / 86400) + 'd ago';
+    }
+
+    function render(data) {
+        var banner = document.getElementById('banner');
+        var status = data.overall_status || 'unknown';
+        banner.className = 'banner ' + status;
+        document.getElementById('banner-text').textContent =
+            OVERALL_LABELS[status] || OVERALL_LABELS.unknown;
+
+        document.getElementById('last-updated').textContent =
+            timeAgo(data.last_updated);
+
+        var box = document.getElementById('components');
+        if (!data.components || data.components.length === 0) {
+            box.innerHTML = '<div class="message">No components configured yet.</div>';
+            return;
+        }
+
+        box.innerHTML = data.components.map(function (c) {
+            var s = c.status || 'unknown';
+            var reach = c.reachability !== null && c.reachability !== undefined
+                ? '<div class="metric"><div class="metric-label">Uptime</div>'
+                  + '<div class="metric-value">' + c.reachability + '%</div></div>'
+                : '';
+            var lat = c.latency_ms !== null && c.latency_ms !== undefined
+                ? '<div class="metric"><div class="metric-label">Latency</div>'
+                  + '<div class="metric-value">' + c.latency_ms + ' ms</div></div>'
+                : '';
+
+            return '<div class="component">'
+                + '<div class="comp-info">'
+                +   '<div class="comp-name">' + escapeHtml(c.name) + '</div>'
+                +   (c.description
+                      ? '<div class="comp-desc">' + escapeHtml(c.description) + '</div>'
+                      : '')
+                + '</div>'
+                + '<div class="comp-right">'
+                +   reach + lat
+                +   '<span class="status-badge ' + s + '">'
+                +     '<span class="dot ' + s + '"></span>'
+                +     (COMPONENT_LABELS[s] || COMPONENT_LABELS.unknown)
+                +   '</span>'
+                + '</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    function fetchStatus() {
+        var url = 'status.json?' + Date.now();   // cache-bust
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', url);
+        xhr.onload = function () {
+            if (xhr.status === 200) {
+                try { render(JSON.parse(xhr.responseText)); }
+                catch (e) { console.error('Parse error:', e); }
+            }
+        };
+        xhr.onerror = function () {
+            document.getElementById('components').innerHTML =
+                '<div class="message">Unable to load status. '
+                + 'Monitoring may not be configured yet.</div>';
+        };
+        xhr.send();
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 60000);
+})();
+</script>
+</body>
+</html>

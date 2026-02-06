@@ -1,0 +1,33 @@
+name: Provision Grafana Checks
+
+# Manual trigger only — run once when setting up, or when adding new checks.
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Provision synthetic monitoring checks
+        env:
+          GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
+          GRAFANA_PROMETHEUS_USER_ID: ${{ secrets.GRAFANA_PROMETHEUS_USER_ID }}
+          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }}
+          GRAFANA_SM_TOKEN: ${{ secrets.GRAFANA_SM_TOKEN }}
+          GRAFANA_STACK_ID: ${{ secrets.GRAFANA_STACK_ID }}
+          GRAFANA_METRICS_INSTANCE_ID: ${{ secrets.GRAFANA_METRICS_INSTANCE_ID }}
+          GRAFANA_LOGS_INSTANCE_ID: ${{ secrets.GRAFANA_LOGS_INSTANCE_ID }}
+        run: python -m setup.provision
