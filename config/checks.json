@@ -27,7 +27,7 @@
       "description": "CaeliCode Solutions website",
       "thresholds": {
         "reachability": { "operational": 95, "degraded": 75 },
-        "latency_ms": { "operational": 500, "degraded": 2000 }
+        "latency_ms": { "operational": 2000, "degraded": 5000 }
       }
     }
   ]
