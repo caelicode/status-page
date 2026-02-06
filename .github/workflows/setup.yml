@@ -1,6 +1,5 @@
 name: Provision Grafana Checks
 
-# Manual trigger only — run once when setting up, or when adding new checks.
 on:
   workflow_dispatch:
 

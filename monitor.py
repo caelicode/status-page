@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""
-Status page monitor — main entry point.
-
-Queries Grafana Cloud Prometheus for synthetic monitoring metrics,
-determines component and overall status, and writes the result to
-status-page/status.json for the static status page.
-
-Run:
-    python monitor.py
-
-Exit codes:
-    0  — success
-    1  — configuration or runtime error
-"""
 
 import logging
 import sys
@@ -34,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    # ── Load configuration ───────────────────────────────────────────
     try:
         config = load_config()
     except KeyError as e:
@@ -50,7 +35,6 @@ def main() -> int:
 
     client = GrafanaClient(config.grafana)
 
-    # ── Fetch metrics for every check ────────────────────────────────
     metrics = {}
     for check in config.checks:
         job_label = check["job_label"]
@@ -74,19 +58,15 @@ def main() -> int:
             logger.error("  Failed: %s", e)
             metrics[job_label] = (None, None)
 
-    # ── Determine status ─────────────────────────────────────────────
     report = build_status_report(config.checks, metrics, config.thresholds)
     logger.info("Overall status: %s", report["overall_status"])
 
-    # ── Check for changes ────────────────────────────────────────────
     existing = load_existing_status(config.status_file)
     if has_status_changed(existing, report):
         logger.info("Status CHANGED — updating status.json")
     else:
         logger.info("Status unchanged — updating metrics only")
 
-    # Always write so the status page shows fresh timestamps/metrics.
-    # The GitHub Actions workflow deploys to Pages on every run.
     save_status(report, config.status_file)
 
     return 0

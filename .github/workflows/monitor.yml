@@ -1,7 +1,5 @@
 name: Monitor & Deploy Status Page
 
-# Runs every 5 minutes via cron, or on manual trigger.
-# Also re-deploys if the status page HTML itself changes.
 on:
   schedule:
     - cron: '*/5 * * * *'
@@ -19,7 +17,6 @@ permissions:
   pages: write
   id-token: write
 
-# Only one monitor+deploy at a time; cancel stale runs
 concurrency:
   group: status-page
   cancel-in-progress: true

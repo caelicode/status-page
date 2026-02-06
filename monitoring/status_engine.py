@@ -1,22 +1,3 @@
-"""
-Status determination engine.
-
-Determines component and overall system status based on reachability
-and latency metrics against configurable thresholds.
-
-Status levels (worst to best):
-    major_outage           — service unreachable or unacceptably slow
-    degraded_performance   — reachable but experiencing issues
-    operational            — healthy
-
-Debouncing strategy:
-    Rather than tracking consecutive failure counts (which requires
-    persistent state between runs), we use wide Prometheus query windows
-    (e.g. 15 minutes for reachability). This means a single bad probe
-    among many won't flip the status — the average naturally smooths
-    transient blips. No state file needed.
-"""
-
 import json
 import logging
 from datetime import datetime, timezone
@@ -27,7 +8,6 @@ from .config import Thresholds
 
 logger = logging.getLogger(__name__)
 
-# Ordered worst-first so we can find the worst status in a list
 STATUS_SEVERITY = ["major_outage", "degraded_performance", "operational"]
 
 
@@ -36,17 +16,10 @@ def determine_component_status(
     latency: Optional[float],
     thresholds: Thresholds,
 ) -> str:
-    """
-    Determine a single component's status.
-
-    If either metric is None (fetch failed), we conservatively report
-    major_outage — we can't confirm the service is healthy.
-    """
     if reachability is None or latency is None:
         logger.warning("Missing metrics — conservatively reporting major_outage")
         return "major_outage"
 
-    # Reachability status
     if reachability >= thresholds.reachability_operational:
         reach_status = "operational"
     elif reachability >= thresholds.reachability_degraded:
@@ -54,7 +27,6 @@ def determine_component_status(
     else:
         reach_status = "major_outage"
 
-    # Latency status
     if latency <= thresholds.latency_operational_ms:
         lat_status = "operational"
     elif latency <= thresholds.latency_degraded_ms:
@@ -62,7 +34,6 @@ def determine_component_status(
     else:
         lat_status = "major_outage"
 
-    # Worst of the two wins
     for level in STATUS_SEVERITY:
         if level in (reach_status, lat_status):
             return level
@@ -71,7 +42,6 @@ def determine_component_status(
 
 
 def determine_overall_status(component_statuses: list) -> str:
-    """Return the worst status across all components."""
     if not component_statuses:
         return "operational"
 
@@ -87,17 +57,6 @@ def build_status_report(
     metrics: dict,
     thresholds: Thresholds,
 ) -> dict:
-    """
-    Build a complete status report for the status page.
-
-    Args:
-        checks:     List of check dicts from config/checks.json.
-        metrics:    Dict mapping job_label -> (reachability, latency).
-        thresholds: Status thresholds.
-
-    Returns:
-        Status report dict ready to be serialized as JSON.
-    """
     now = datetime.now(timezone.utc).isoformat()
     components = []
     statuses = []
@@ -125,12 +84,6 @@ def build_status_report(
 
 
 def has_status_changed(old_report: Optional[dict], new_report: dict) -> bool:
-    """
-    Check if any component's status (not just its metrics) has changed.
-
-    Only considers status transitions — latency/reachability value changes
-    alone don't count as a "change" for notification purposes.
-    """
     if old_report is None:
         return True
 
@@ -148,7 +101,6 @@ def has_status_changed(old_report: Optional[dict], new_report: dict) -> bool:
 
 
 def load_existing_status(status_path: Path) -> Optional[dict]:
-    """Load the current status.json, or None if it doesn't exist."""
     try:
         with open(status_path, "r") as f:
             return json.load(f)
@@ -157,7 +109,6 @@ def load_existing_status(status_path: Path) -> Optional[dict]:
 
 
 def save_status(report: dict, status_path: Path) -> None:
-    """Write the status report to disk."""
     status_path.parent.mkdir(parents=True, exist_ok=True)
     with open(status_path, "w") as f:
         json.dump(report, f, indent=2)

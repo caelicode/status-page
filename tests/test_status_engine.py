@@ -1,9 +1,3 @@
-"""
-Unit tests for the status determination engine.
-
-These validate the core decision logic without hitting any external APIs.
-"""
-
 import json
 import pytest
 from pathlib import Path
@@ -24,8 +18,6 @@ def thresholds():
     return Thresholds()
 
 
-# ── determine_component_status ───────────────────────────────────────
-
 class TestDetermineComponentStatus:
 
     def test_fully_operational(self, thresholds):
@@ -44,7 +36,6 @@ class TestDetermineComponentStatus:
         assert determine_component_status(99.0, 5000.0, thresholds) == "major_outage"
 
     def test_worst_status_wins(self, thresholds):
-        # Reachability operational + latency outage → outage
         assert determine_component_status(99.0, 5000.0, thresholds) == "major_outage"
 
     def test_none_reachability_defaults_to_outage(self, thresholds):
@@ -55,8 +46,6 @@ class TestDetermineComponentStatus:
 
     def test_both_none_defaults_to_outage(self, thresholds):
         assert determine_component_status(None, None, thresholds) == "major_outage"
-
-    # ── Boundary values ──────────────────────────────────────────────
 
     def test_reachability_exactly_at_operational_boundary(self, thresholds):
         assert determine_component_status(95.0, 100.0, thresholds) == "operational"
@@ -82,8 +71,6 @@ class TestDetermineComponentStatus:
     def test_latency_just_above_degraded_boundary(self, thresholds):
         assert determine_component_status(99.0, 1000.1, thresholds) == "major_outage"
 
-    # ── Custom thresholds ────────────────────────────────────────────
-
     def test_custom_thresholds(self):
         custom = Thresholds(
             reachability_operational=99.0,
@@ -91,11 +78,8 @@ class TestDetermineComponentStatus:
             latency_operational_ms=50.0,
             latency_degraded_ms=200.0,
         )
-        # Would be operational with defaults, but degraded with stricter thresholds
         assert determine_component_status(96.0, 100.0, custom) == "degraded_performance"
 
-
-# ── determine_overall_status ─────────────────────────────────────────
 
 class TestDetermineOverallStatus:
 
@@ -118,8 +102,6 @@ class TestDetermineOverallStatus:
         assert determine_overall_status(["degraded_performance"]) == "degraded_performance"
 
 
-# ── build_status_report ──────────────────────────────────────────────
-
 class TestBuildStatusReport:
 
     def test_basic_report_structure(self, thresholds):
@@ -140,7 +122,7 @@ class TestBuildStatusReport:
 
     def test_missing_metrics_reports_outage(self, thresholds):
         checks = [{"name": "DB", "job_label": "db"}]
-        metrics = {}  # no data for "db"
+        metrics = {}
 
         report = build_status_report(checks, metrics, thresholds)
 
@@ -154,8 +136,8 @@ class TestBuildStatusReport:
             {"name": "B", "job_label": "b"},
         ]
         metrics = {
-            "a": (99.0, 100.0),     # operational
-            "b": (80.0, 500.0),     # degraded
+            "a": (99.0, 100.0),
+            "b": (80.0, 500.0),
         }
 
         report = build_status_report(checks, metrics, thresholds)
@@ -164,8 +146,6 @@ class TestBuildStatusReport:
         assert report["components"][0]["status"] == "operational"
         assert report["components"][1]["status"] == "degraded_performance"
 
-
-# ── has_status_changed ───────────────────────────────────────────────
 
 class TestHasStatusChanged:
 
@@ -200,7 +180,6 @@ class TestHasStatusChanged:
         assert has_status_changed(old, new) is True
 
     def test_metric_change_without_status_change_is_not_changed(self):
-        """Latency/reachability values changing shouldn't count as a status change."""
         old = {
             "overall_status": "operational",
             "components": [{"name": "A", "status": "operational"}],
@@ -211,8 +190,6 @@ class TestHasStatusChanged:
         }
         assert has_status_changed(old, new) is False
 
-
-# ── save / load round-trip ───────────────────────────────────────────
 
 class TestPersistence:
 

@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-One-time provisioning: create Grafana Synthetic Monitoring checks.
-
-Reads endpoint definitions from config/checks.json and creates the
-corresponding synthetic HTTP checks in Grafana Cloud. Checks that
-already exist are skipped (idempotent).
-
-Run:
-    python -m setup.provision
-
-Required environment variables (in addition to the standard monitor ones):
-    GRAFANA_SM_TOKEN             Synthetic Monitoring access token
-    GRAFANA_STACK_ID             Grafana Cloud stack ID
-    GRAFANA_METRICS_INSTANCE_ID  Metrics instance ID
-    GRAFANA_LOGS_INSTANCE_ID     Logs instance ID
-"""
 
 import logging
 import sys
@@ -30,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> int:
-    # ── Load configuration ───────────────────────────────────────────
     try:
         config = load_config()
     except KeyError as e:
@@ -47,7 +30,6 @@ def main() -> int:
         )
         return 1
 
-    # ── Register with Synthetic Monitoring API ───────────────────────
     sm = SyntheticMonitoringClient(config.grafana)
 
     logger.info("Registering with Grafana Synthetic Monitoring...")
@@ -58,7 +40,6 @@ def main() -> int:
         logger.error("Registration failed: %s", e)
         return 1
 
-    # ── Create checks ────────────────────────────────────────────────
     created = []
     failed = []
 
@@ -81,7 +62,6 @@ def main() -> int:
             logger.error("  Failed: %s", e)
             failed.append(name)
 
-    # ── Summary ──────────────────────────────────────────────────────
     logger.info("Provisioning complete: %d created/verified, %d failed",
                 len(created), len(failed))
 
