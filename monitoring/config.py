@@ -62,7 +62,7 @@ class MonitorConfig:
 
     def __post_init__(self):
         if self.status_file is None:
-            self.status_file = PROJECT_ROOT / "status-page" / "status.json"
+            self.status_file = PROJECT_ROOT / "github-pages" / "status.json"
 
 
 def load_checks(config_path: Optional[Path] = None) -> list:

@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'status-page/**'
+      - 'github-pages/**'
       - 'config/**'
       - 'monitoring/**'
       - 'monitor.py'
@@ -18,7 +18,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: status-page
+  group: github-pages
   cancel-in-progress: true
 
 jobs:
@@ -54,7 +54,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: status-page
+          path: github-pages
 
       - name: Deploy to GitHub Pages
         id: deploy

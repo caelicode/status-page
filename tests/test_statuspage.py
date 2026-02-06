@@ -4,8 +4,8 @@ import pytest
 import requests
 from unittest.mock import patch, MagicMock
 
-from statuspage.client import StatuspageClient, StatuspageError
-from statuspage.sync import load_statuspage_config, load_status_report, STATUS_MAP
+from atlassian_statuspage.client import StatuspageClient, StatuspageError
+from atlassian_statuspage.sync import load_statuspage_config, load_status_report, STATUS_MAP
 
 
 @pytest.fixture

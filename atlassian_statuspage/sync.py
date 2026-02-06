@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from statuspage.client import StatuspageClient, StatuspageError
+from atlassian_statuspage.client import StatuspageClient, StatuspageError
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +32,7 @@ def load_statuspage_config(config_path=None):
 
 def load_status_report(status_path=None):
     if status_path is None:
-        status_path = PROJECT_ROOT / "status-page" / "status.json"
+        status_path = PROJECT_ROOT / "github-pages" / "status.json"
     with open(status_path, "r") as f:
         return json.load(f)
 
@@ -57,7 +57,7 @@ def main() -> int:
     try:
         report = load_status_report()
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.error("Failed to load status-page/status.json: %s", e)
+        logger.error("Failed to load github-pages/status.json: %s", e)
         return 1
 
     client = StatuspageClient(api_key, page_id)

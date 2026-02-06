@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'statuspage/**'
+      - 'atlassian_statuspage/**'
       - 'config/statuspage.json'
   workflow_dispatch:
 
@@ -37,4 +37,4 @@ jobs:
       - name: Sync to Statuspage
         env:
           STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
-        run: python -m statuspage.sync
+        run: python -m atlassian_statuspage.sync
