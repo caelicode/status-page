@@ -2,6 +2,8 @@
 
 Automated service status page powered by Grafana Cloud (free tier), GitHub Actions, and GitHub Pages — with optional Atlassian Statuspage integration. Zero hosting cost.
 
+**Live status pages:** [GitHub Pages](https://caelicode.github.io/status-page/) · [Atlassian Statuspage](https://caelicode.statuspage.io/)
+
 ## How it works
 
 ```
