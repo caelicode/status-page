@@ -64,7 +64,28 @@ def build_status_report(
     for check in checks:
         job_label = check["job_label"]
         reachability, latency = metrics.get(job_label, (None, None))
-        status = determine_component_status(reachability, latency, thresholds)
+
+        check_thresholds = thresholds
+        override = check.get("thresholds")
+        if override:
+            reach_cfg = override.get("reachability", {})
+            lat_cfg = override.get("latency_ms", {})
+            check_thresholds = Thresholds(
+                reachability_operational=reach_cfg.get(
+                    "operational", thresholds.reachability_operational
+                ),
+                reachability_degraded=reach_cfg.get(
+                    "degraded", thresholds.reachability_degraded
+                ),
+                latency_operational_ms=lat_cfg.get(
+                    "operational", thresholds.latency_operational_ms
+                ),
+                latency_degraded_ms=lat_cfg.get(
+                    "degraded", thresholds.latency_degraded_ms
+                ),
+            )
+
+        status = determine_component_status(reachability, latency, check_thresholds)
         statuses.append(status)
 
         components.append({

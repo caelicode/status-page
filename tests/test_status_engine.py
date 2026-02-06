@@ -146,6 +146,75 @@ class TestBuildStatusReport:
         assert report["components"][0]["status"] == "operational"
         assert report["components"][1]["status"] == "degraded_performance"
 
+    def test_per_check_thresholds_override_global(self, thresholds):
+        checks = [
+            {
+                "name": "Website",
+                "job_label": "web",
+                "thresholds": {
+                    "latency_ms": {"operational": 500, "degraded": 2000},
+                },
+            },
+        ]
+        metrics = {"web": (99.0, 400.0)}
+
+        report = build_status_report(checks, metrics, thresholds)
+
+        assert report["components"][0]["status"] == "operational"
+
+    def test_per_check_thresholds_same_latency_different_result(self, thresholds):
+        checks = [
+            {"name": "API", "job_label": "api"},
+            {
+                "name": "Website",
+                "job_label": "web",
+                "thresholds": {
+                    "latency_ms": {"operational": 500, "degraded": 2000},
+                },
+            },
+        ]
+        metrics = {
+            "api": (99.0, 300.0),
+            "web": (99.0, 300.0),
+        }
+
+        report = build_status_report(checks, metrics, thresholds)
+
+        assert report["components"][0]["status"] == "degraded_performance"
+        assert report["components"][1]["status"] == "operational"
+
+    def test_per_check_partial_override_inherits_global(self, thresholds):
+        checks = [
+            {
+                "name": "Site",
+                "job_label": "site",
+                "thresholds": {
+                    "latency_ms": {"operational": 500, "degraded": 2000},
+                },
+            },
+        ]
+        metrics = {"site": (80.0, 100.0)}
+
+        report = build_status_report(checks, metrics, thresholds)
+
+        assert report["components"][0]["status"] == "degraded_performance"
+
+    def test_per_check_outage_with_relaxed_thresholds(self, thresholds):
+        checks = [
+            {
+                "name": "Site",
+                "job_label": "site",
+                "thresholds": {
+                    "latency_ms": {"operational": 500, "degraded": 2000},
+                },
+            },
+        ]
+        metrics = {"site": (99.0, 2500.0)}
+
+        report = build_status_report(checks, metrics, thresholds)
+
+        assert report["components"][0]["status"] == "major_outage"
+
 
 class TestHasStatusChanged:
 
