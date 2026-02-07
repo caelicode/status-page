@@ -21,7 +21,7 @@ permissions:
 
 concurrency:
   group: github-pages
-  cancel-in-progress: true
+  cancel-in-progress: false  # must be false — true can orphan Pages deployments
 
 jobs:
   monitor-and-deploy:
