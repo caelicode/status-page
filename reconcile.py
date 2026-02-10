@@ -340,9 +340,9 @@ def main() -> int:
 
         try:
             sm_client.register()
-            logger.info("Registered with Grafana Synthetic Monitoring")
+            logger.info("Authenticated with Grafana Synthetic Monitoring")
         except GrafanaClientError as e:
-            logger.error("Grafana SM registration failed: %s", e)
+            logger.error("Grafana SM authentication failed: %s", e)
             return 1
 
         grafana_result = reconcile_grafana(config, sm_client)

@@ -99,6 +99,29 @@ class SyntheticMonitoringClient:
 
     def register(self) -> Tuple[str, int]:
         try:
+            probe = self._session.get(
+                f"{self.config.synthetic_monitoring_url}/api/v1/check/list",
+                headers={
+                    "Authorization": f"Bearer {self.config.synthetic_monitoring_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30,
+            )
+            if probe.status_code == 200:
+                self._access_token = self.config.synthetic_monitoring_token
+                checks = probe.json()
+                if isinstance(checks, list) and checks:
+                    self._tenant_id = checks[0].get("tenantId", 0)
+                else:
+                    self._tenant_id = 0
+                logger.info(
+                    "Using existing SM access token (tenant: %s)", self._tenant_id
+                )
+                return self._access_token, self._tenant_id
+        except requests.RequestException:
+            pass
+
+        try:
             response = self._session.post(
                 f"{self.config.synthetic_monitoring_url}/api/v1/register/install",
                 headers={
@@ -129,7 +152,7 @@ class SyntheticMonitoringClient:
             raise GrafanaClientError(f"Registration failed: {e}") from e
 
     def _ensure_registered(self):
-        if not self._access_token or not self._tenant_id:
+        if self._access_token is None:
             raise GrafanaClientError("Must call register() first")
 
     def list_checks(self) -> list:
