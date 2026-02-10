@@ -260,11 +260,19 @@ class StatuspageClient:
         component_ids: Optional[list] = None,
         components: Optional[dict] = None,
         deliver_notifications: bool = True,
+        impact_override: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> dict:
         if status and status not in self.VALID_INCIDENT_STATUSES:
             raise StatuspageError(
                 f"Invalid incident status '{status}'. "
                 f"Must be one of: {', '.join(sorted(self.VALID_INCIDENT_STATUSES))}"
+            )
+
+        if impact_override and impact_override not in self.VALID_IMPACTS:
+            raise StatuspageError(
+                f"Invalid impact '{impact_override}'. "
+                f"Must be one of: {', '.join(sorted(self.VALID_IMPACTS))}"
             )
 
         payload: dict = {"incident": {}}
@@ -277,6 +285,10 @@ class StatuspageClient:
             payload["incident"]["component_ids"] = component_ids
         if components:
             payload["incident"]["components"] = components
+        if impact_override:
+            payload["incident"]["impact_override"] = impact_override
+        if name is not None:
+            payload["incident"]["name"] = name
 
         try:
             response = self._session.patch(

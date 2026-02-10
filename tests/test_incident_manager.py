@@ -242,6 +242,7 @@ class TestProcessIncidents:
             {
                 "id": "existing-inc",
                 "status": "investigating",
+                "impact": "critical",
                 "components": [{"id": "c1"}],
             }
         ]
@@ -253,6 +254,86 @@ class TestProcessIncidents:
         assert result["updated"][0]["incident_id"] == "existing-inc"
         mock_client.create_incident.assert_not_called()
         mock_client.update_incident.assert_called_once()
+
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert call_kwargs["impact_override"] == "critical"
+        assert "major outage" in call_kwargs["name"]
+
+    def test_escalation_degraded_to_outage(self, mock_client, component_mapping):
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "degraded-inc",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        result = process_incidents(
+            mock_client, component_mapping, report
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is True
+
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert call_kwargs["impact_override"] == "critical"
+        assert "major outage" in call_kwargs["name"]
+        assert call_kwargs["components"] == {"c1": "major_outage"}
+        assert call_kwargs["deliver_notifications"] is True
+
+    def test_no_escalation_same_impact(self, mock_client, component_mapping):
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "existing-inc",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is False
+
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert call_kwargs["impact_override"] == "minor"
+        assert call_kwargs["deliver_notifications"] is False
+
+    def test_escalation_notifies_subscribers(self, mock_client, component_mapping):
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "degraded-inc",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        process_incidents(
+            mock_client, component_mapping, report,
+            notify_subscribers=True,
+        )
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert call_kwargs["deliver_notifications"] is True
+
+    def test_escalation_respects_notify_disabled(self, mock_client, component_mapping):
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "degraded-inc",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        process_incidents(
+            mock_client, component_mapping, report,
+            notify_subscribers=False,
+        )
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert call_kwargs["deliver_notifications"] is False
 
     def test_recovery_resolves_incident_and_creates_postmortem(
         self, mock_client, component_mapping

@@ -339,6 +339,36 @@ class TestUpdateIncident:
             payload = mock_patch.call_args[1]["json"]["incident"]
             assert payload["components"] == {"c1": "operational"}
 
+    def test_update_with_impact_override(self, client):
+        with patch.object(client._session, "patch") as mock_patch:
+            mock_patch.return_value = MagicMock(status_code=200)
+            mock_patch.return_value.json.return_value = {"id": "inc1"}
+            mock_patch.return_value.raise_for_status = MagicMock()
+
+            client.update_incident(
+                "inc1",
+                impact_override="critical",
+                name="API experiencing a major outage",
+            )
+            payload = mock_patch.call_args[1]["json"]["incident"]
+            assert payload["impact_override"] == "critical"
+            assert payload["name"] == "API experiencing a major outage"
+
+    def test_update_invalid_impact_raises(self, client):
+        with pytest.raises(StatuspageError, match="Invalid impact"):
+            client.update_incident("inc1", impact_override="extreme")
+
+    def test_update_omits_impact_when_none(self, client):
+        with patch.object(client._session, "patch") as mock_patch:
+            mock_patch.return_value = MagicMock(status_code=200)
+            mock_patch.return_value.json.return_value = {"id": "inc1"}
+            mock_patch.return_value.raise_for_status = MagicMock()
+
+            client.update_incident("inc1", body="no impact change")
+            payload = mock_patch.call_args[1]["json"]["incident"]
+            assert "impact_override" not in payload
+            assert "name" not in payload
+
     def test_failure_raises(self, client):
         with patch.object(client._session, "patch") as mock_patch:
             mock_patch.side_effect = requests.ConnectionError("fail")
