@@ -13,9 +13,6 @@ from atlassian_statuspage.incident_manager import (
 )
 
 
-# ── Helper function tests ────────────────────────────────────────────
-
-
 class TestFindOpenIncident:
 
     def test_finds_matching_incident(self):
@@ -149,9 +146,6 @@ class TestGeneratePostmortem:
         }
         body = generate_postmortem(incident, "Service", "now")
         assert "not-a-date" in body
-
-
-# ── process_incidents integration tests ──────────────────────────────
 
 
 @pytest.fixture

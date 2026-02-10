@@ -15,6 +15,18 @@ class StatuspageError(Exception):
 
 class StatuspageClient:
 
+    VALID_COMPONENT_STATUSES = {
+        "operational",
+        "degraded_performance",
+        "partial_outage",
+        "major_outage",
+        "under_maintenance",
+    }
+
+    VALID_INCIDENT_STATUSES = {"investigating", "identified", "monitoring", "resolved"}
+
+    VALID_IMPACTS = {"none", "minor", "major", "critical"}
+
     def __init__(self, api_key: str, page_id: str):
         self.api_key = api_key
         self.page_id = page_id
@@ -26,8 +38,6 @@ class StatuspageClient:
 
     def _url(self, path: str) -> str:
         return f"{BASE_URL}/pages/{self.page_id}/{path}"
-
-    # ── Components ──────────────────────────────────────────────────────
 
     def list_components(self) -> list:
         try:
@@ -46,16 +56,9 @@ class StatuspageClient:
         showcase: bool = True,
         only_show_if_degraded: bool = False,
     ) -> dict:
-        valid_statuses = {
-            "operational",
-            "degraded_performance",
-            "partial_outage",
-            "major_outage",
-            "under_maintenance",
-        }
-        if status not in valid_statuses:
+        if status not in self.VALID_COMPONENT_STATUSES:
             raise StatuspageError(
-                f"Invalid status '{status}'. Must be one of: {', '.join(sorted(valid_statuses))}"
+                f"Invalid status '{status}'. Must be one of: {', '.join(sorted(self.VALID_COMPONENT_STATUSES))}"
             )
 
         payload = {
@@ -82,16 +85,9 @@ class StatuspageClient:
             raise StatuspageError(f"Failed to create component '{name}': {e}") from e
 
     def update_component_status(self, component_id: str, status: str) -> dict:
-        valid = {
-            "operational",
-            "degraded_performance",
-            "partial_outage",
-            "major_outage",
-            "under_maintenance",
-        }
-        if status not in valid:
+        if status not in self.VALID_COMPONENT_STATUSES:
             raise StatuspageError(
-                f"Invalid status '{status}'. Must be one of: {', '.join(sorted(valid))}"
+                f"Invalid status '{status}'. Must be one of: {', '.join(sorted(self.VALID_COMPONENT_STATUSES))}"
             )
 
         try:
@@ -118,8 +114,6 @@ class StatuspageClient:
             raise StatuspageError(
                 f"Failed to delete component {component_id}: {e}"
             ) from e
-
-    # ── Metrics ─────────────────────────────────────────────────────────
 
     def list_metrics(self) -> list:
         try:
@@ -188,8 +182,6 @@ class StatuspageClient:
                 f"Failed to submit data for metric {metric_id}: {e}"
             ) from e
 
-    # ── Incidents ───────────────────────────────────────────────────────
-
     def list_unresolved_incidents(self) -> list:
         try:
             response = self._session.get(
@@ -222,20 +214,17 @@ class StatuspageClient:
         deliver_notifications: bool = True,
         impact_override: Optional[str] = None,
     ) -> dict:
-        valid_statuses = {"investigating", "identified", "monitoring", "resolved"}
-        if status not in valid_statuses:
+        if status not in self.VALID_INCIDENT_STATUSES:
             raise StatuspageError(
                 f"Invalid incident status '{status}'. "
-                f"Must be one of: {', '.join(sorted(valid_statuses))}"
+                f"Must be one of: {', '.join(sorted(self.VALID_INCIDENT_STATUSES))}"
             )
 
-        if impact_override:
-            valid_impacts = {"none", "minor", "major", "critical"}
-            if impact_override not in valid_impacts:
-                raise StatuspageError(
-                    f"Invalid impact '{impact_override}'. "
-                    f"Must be one of: {', '.join(sorted(valid_impacts))}"
-                )
+        if impact_override and impact_override not in self.VALID_IMPACTS:
+            raise StatuspageError(
+                f"Invalid impact '{impact_override}'. "
+                f"Must be one of: {', '.join(sorted(self.VALID_IMPACTS))}"
+            )
 
         payload = {
             "incident": {
@@ -272,13 +261,11 @@ class StatuspageClient:
         components: Optional[dict] = None,
         deliver_notifications: bool = True,
     ) -> dict:
-        if status:
-            valid_statuses = {"investigating", "identified", "monitoring", "resolved"}
-            if status not in valid_statuses:
-                raise StatuspageError(
-                    f"Invalid incident status '{status}'. "
-                    f"Must be one of: {', '.join(sorted(valid_statuses))}"
-                )
+        if status and status not in self.VALID_INCIDENT_STATUSES:
+            raise StatuspageError(
+                f"Invalid incident status '{status}'. "
+                f"Must be one of: {', '.join(sorted(self.VALID_INCIDENT_STATUSES))}"
+            )
 
         payload: dict = {"incident": {}}
         if status:
@@ -330,8 +317,6 @@ class StatuspageClient:
             raise StatuspageError(
                 f"Failed to delete incident {incident_id}: {e}"
             ) from e
-
-    # ── Postmortems ─────────────────────────────────────────────────────
 
     def create_postmortem(
         self,

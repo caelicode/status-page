@@ -84,10 +84,21 @@ Edit `config/checks.json`:
       "job_label": "my-api",
       "url": "https://api.example.com/health",
       "description": "Primary API health endpoint"
+    },
+    {
+      "name": "Website",
+      "job_label": "website",
+      "url": "https://example.com",
+      "description": "Public website",
+      "thresholds": {
+        "latency_ms": { "operational": 500, "degraded": 2000 }
+      }
     }
   ]
 }
 ```
+
+Per-check thresholds are optional. When provided, they override the global thresholds for that check only. Any threshold not specified in the per-check block inherits the global value — in the example above, the Website check uses relaxed latency thresholds (500ms/2000ms) while inheriting the global reachability thresholds (95%/75%).
 
 ### 5. Provision checks (optional)
 
@@ -146,7 +157,7 @@ Rather than tracking consecutive failures (which needs persistent state between 
 | Reachability | >= 95% | >= 75% | < 75% |
 | Latency | <= 200ms | <= 1000ms | > 1000ms |
 
-The worst of reachability and latency determines the component status. The worst component determines overall status. Per-check threshold overrides are supported in `checks.json`.
+The worst of reachability and latency determines the component status. The worst component determines overall status. If either metric is unavailable (Prometheus returns no data), the component conservatively defaults to `major_outage`.
 
 ## Running tests
 
@@ -224,7 +235,9 @@ STATUSPAGE_API_KEY=your-key python -m atlassian_statuspage.manage delete-compone
 STATUSPAGE_API_KEY=your-key python -m atlassian_statuspage.manage cleanup -y
 ```
 
-You can also run these from GitHub Actions via the workflow dispatch dropdown — select a management command instead of the default sync.
+The `sync-components` command is idempotent: it skips any check that already has a `component_id` in the config, adopts existing Statuspage components by name, and only creates new ones when needed. Similarly, `sync-metrics` skips checks that already have a `metric_id`.
+
+You can also run these from GitHub Actions without CLI access. Go to Actions → **Sync to Atlassian Statuspage** → **Run workflow**, then select a management command from the dropdown (sync-components, sync-metrics, list-components, list-metrics, or list-incidents). When a management command is selected, the normal sync flow is skipped.
 
 ### 6. Automated incident management
 
@@ -234,6 +247,14 @@ The sync workflow automatically manages incidents based on status changes:
 - **Auto-update**: While a component remains degraded/down, the incident is updated with current metrics (without re-notifying subscribers).
 - **Auto-resolve**: When a component returns to operational, the incident is resolved and subscribers are notified.
 - **Auto-postmortem**: After resolution, a postmortem is auto-generated from the incident timeline (summary, timeline, root cause, preventive measures) and published to the status page.
+
+Component status maps to incident impact as follows:
+
+| Component Status | Incident Impact | Incident Status |
+|------------------|----------------|-----------------|
+| `degraded_performance` | `minor` | `investigating` |
+| `major_outage` | `critical` | `investigating` |
+| Recovery → `operational` | — | `resolved` |
 
 Detection is stateless — each run queries Statuspage for unresolved incidents via `GET /incidents/unresolved` and matches them to components. No local state files needed.
 
