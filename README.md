@@ -24,12 +24,23 @@ flowchart TB
     SM -. "probes" .-> EP1
     SM -. "probes" .-> EP2
 
-    subgraph CONFIG["Config Files"]
-        CJ["config/checks.json<br/>endpoints, thresholds"]
-        SPJ["config/statuspage.json<br/>component + metric IDs"]
+    subgraph CONFIG["Configuration"]
+        CY["config.yaml<br/>single source of truth"]
     end
 
+    CY -- "reads" --> RECON["reconcile.py<br/>GitOps reconciliation engine"]
+    RECON -- "generates" --> CJ["config/checks.json<br/>(auto-generated)"]
+    RECON -- "generates" --> SPJ["config/statuspage.json<br/>(auto-generated)"]
+    RECON -- "provisions" --> SM
+    RECON -- "provisions" --> SP
+
     subgraph GHA["GitHub Actions"]
+        subgraph WF0["reconcile.yml · on config.yaml push"]
+            RECWF["reconcile.py<br/>provision Grafana + Statuspage"]
+            RECWF -- "commits" --> CJ
+            RECWF -- "commits" --> SPJ
+        end
+
         subgraph WF1["monitor.yml · every 5 min"]
             MON["monitor.py<br/>query Prometheus → determine status"]
             MON -- "writes" --> SJ["github-pages/status.json"]
@@ -47,17 +58,15 @@ flowchart TB
         end
 
         subgraph WF4["setup.yml · manual trigger"]
-            PROV["provision.py<br/>create Grafana checks"]
+            PROV["reconcile.py<br/>provision Grafana checks"]
         end
     end
 
     PROM -- "PromQL queries" --> MON
     CJ -- "reads" --> MON
-    CJ -- "reads" --> PROV
-    PROV -- "create checks" --> SM
     SJ -- "reads" --> SYNC
     SPJ -- "reads" --> SYNC
-    CJ -- "reads" --> MGR
+    CY -- "reads" --> MGR
     SPJ -- "reads + updates" --> MGR
     SYNC -- "component status + metrics" --> SP
     IM -- "incidents + postmortems" --> SP
@@ -71,10 +80,12 @@ flowchart TB
     SP -. "public status page + notifications" .-> USERS
 ```
 
-1. **Grafana Cloud** runs synthetic HTTP checks against your endpoints from multiple geographic locations and stores the results as Prometheus metrics.
-2. **GitHub Actions** runs `monitor.py` every 5 minutes. It queries Grafana's Prometheus API for reachability and latency, determines each component's status against configurable thresholds, and writes `github-pages/status.json`.
-3. **GitHub Pages** serves a static HTML page that reads `status.json` and renders the current status. It auto-refreshes every 60 seconds in the browser.
-4. **Atlassian Statuspage** *(optional)* — an independent workflow reads the generated `status.json` and syncs component statuses, latency metrics, and manages the full incident lifecycle (create → update → resolve → postmortem) automatically.
+1. **Edit config.yaml** — the single source of truth for all endpoints, thresholds, components, metrics, and settings. No more manual JSON editing.
+2. **Push to GitHub** — the `reconcile.yml` workflow auto-triggers, runs `reconcile.py` to provision Grafana checks and Statuspage components/metrics, and commits the generated `config/checks.json` and `config/statuspage.json` back to the repo.
+3. **Grafana Cloud** runs synthetic HTTP checks against your endpoints from multiple geographic locations and stores the results as Prometheus metrics.
+4. **GitHub Actions** runs `monitor.py` every 5 minutes. It queries Grafana's Prometheus API for reachability and latency, determines each component's status against configurable thresholds, and writes `github-pages/status.json`.
+5. **GitHub Pages** serves a static HTML page that reads `status.json` and renders the current status. It auto-refreshes every 60 seconds in the browser.
+6. **Atlassian Statuspage** *(optional)* — an independent workflow reads the generated `status.json` and syncs component statuses, latency metrics, and manages the full incident lifecycle (create → update → resolve → postmortem) automatically.
 
 No commit spam — the monitor workflow deploys directly via the Pages API without committing status updates to the repo.
 
@@ -117,45 +128,72 @@ Go to your repo → Settings → Secrets and variables → Actions, and add:
 | `GRAFANA_METRICS_INSTANCE_ID` | *(setup only)* Metrics instance ID |
 | `GRAFANA_LOGS_INSTANCE_ID` | *(setup only)* Logs instance ID |
 
-### 4. Define your checks
+### 4. Define your configuration
 
-Edit `config/checks.json`:
+Edit `config.yaml` — the single source of truth:
 
-```json
-{
-  "settings": {
-    "reachability_query_window": "15m",
-    "latency_query_window": "5m",
-    "thresholds": {
-      "reachability": { "operational": 95, "degraded": 75 },
-      "latency_ms": { "operational": 200, "degraded": 1000 }
-    }
-  },
-  "checks": [
-    {
-      "name": "My API",
-      "job_label": "my-api",
-      "url": "https://api.example.com/health",
-      "description": "Primary API health endpoint"
-    },
-    {
-      "name": "Website",
-      "job_label": "website",
-      "url": "https://example.com",
-      "description": "Public website",
-      "thresholds": {
-        "latency_ms": { "operational": 500, "degraded": 2000 }
-      }
-    }
-  ]
-}
+```yaml
+statuspage:
+  page_id: "your-page-id"
+
+settings:
+  thresholds:
+    reachability:
+      operational: 95
+      degraded: 75
+    latency_ms:
+      operational: 200
+      degraded: 1000
+
+incidents:
+  auto_create: true
+  auto_resolve: true
+  auto_postmortem: true
+  notify_subscribers: true
+
+endpoints:
+  my-api:
+    name: "My API"
+    url: "https://api.example.com/health"
+    description: "Main API endpoint"
+    frequency: 60000
+    probes: [1, 2, 3]
+    component: true
+    metric: true
+
+  website:
+    name: "Website"
+    url: "https://example.com"
+    description: "Public website"
+    frequency: 60000
+    probes: [1, 2, 3]
+    component: true
+    metric: true
+    thresholds:
+      latency_ms:
+        operational: 500
+        degraded: 2000
 ```
 
-Per-check thresholds are optional. When provided, they override the global thresholds for that check only. Any threshold not specified in the per-check block inherits the global value — in the example above, the Website check uses relaxed latency thresholds (500ms/2000ms) while inheriting the global reachability thresholds (95%/75%).
+Per-endpoint thresholds are optional. When provided, they override the global thresholds for that endpoint only. Set `component: true` to sync to Statuspage, and `metric: true` to track latency metrics.
 
-### 5. Provision checks (optional)
+### 5. Push config.yaml to trigger reconciliation
 
-If you want to create synthetic monitoring checks programmatically rather than through the Grafana UI, run the **Provision Grafana Checks** workflow manually from the Actions tab.
+Push your changes to GitHub:
+
+```bash
+git add config.yaml
+git commit -m "Add endpoints to config"
+git push
+```
+
+The `reconcile.yml` workflow auto-triggers, runs `reconcile.py` to:
+- Provision Grafana synthetic monitoring checks from your config
+- Create/update Statuspage components and metrics
+- Generate `config/checks.json` and `config/statuspage.json` automatically
+- Commit the generated files back to the repo
+
+You can also manually trigger the reconciliation from the Actions tab if needed.
 
 ### 6. Enable GitHub Pages
 
@@ -169,7 +207,7 @@ The monitor workflow runs every 5 minutes automatically. Your status page will b
 
 ```
 ├── monitoring/                  Python monitoring package
-│   ├── config.py                Config loading (env vars + checks.json)
+│   ├── config.py                Config loading (env vars + config.yaml)
 │   ├── grafana_client.py        Grafana Cloud API client
 │   └── status_engine.py         Status determination logic
 ├── atlassian_statuspage/        Atlassian Statuspage integration
@@ -178,22 +216,25 @@ The monitor workflow runs every 5 minutes automatically. Your status page will b
 │   ├── incident_manager.py      Automated incident lifecycle + postmortems
 │   └── manage.py                CLI for component/metric provisioning
 ├── setup/
-│   └── provision.py             One-time Grafana check provisioning
+│   └── reconcile.py             GitOps reconciliation engine (Grafana + Statuspage provisioning)
 ├── github-pages/                Static site (deployed to GitHub Pages)
 │   ├── index.html               Status page UI
 │   └── status.json              Auto-generated by monitor
 ├── config/
-│   ├── checks.json              Check definitions and thresholds
-│   └── statuspage.json          Statuspage component/metric ID mappings
+│   ├── config.yaml              Single source of truth (edit this)
+│   ├── checks.json              Auto-generated by reconcile.py
+│   └── statuspage.json          Auto-generated by reconcile.py
 ├── tests/
 │   ├── test_status_engine.py    Monitoring unit tests
 │   ├── test_statuspage.py       Statuspage client + sync tests
 │   ├── test_incident_manager.py Incident automation tests
-│   └── test_manage.py           Management CLI tests
+│   ├── test_manage.py           Management CLI tests
+│   └── test_reconcile.py        Reconciliation engine tests (29 new tests)
 ├── .github/workflows/
+│   ├── reconcile.yml            GitOps auto-provisioning (triggers on config.yaml change)
 │   ├── monitor.yml              Cron monitor + Pages deployment
 │   ├── statuspage.yml           Cron sync + incident automation
-│   └── setup.yml                One-time provisioning
+│   └── setup.yml                Manual reconciliation trigger (backward compatible)
 ├── monitor.py                   Main entry point
 ├── requirements.txt
 └── README.md
@@ -219,13 +260,15 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
+The test suite includes 168 tests (29 new reconciliation tests for the GitOps workflow).
+
 ## Atlassian Statuspage integration (optional)
 
 An independent workflow syncs your monitoring data to an [Atlassian Statuspage](https://www.atlassian.com/software/statuspage) (free tier: 25 components, 100 subscribers, 2 metrics).
 
 ### 1. Create a Statuspage account
 
-Sign up at [statuspage.io](https://www.atlassian.com/software/statuspage). Create a page and add your components.
+Sign up at [statuspage.io](https://www.atlassian.com/software/statuspage). Create a page.
 
 ### 2. Get your Statuspage credentials
 
@@ -233,7 +276,6 @@ From your Statuspage management dashboard:
 
 - **API Key**: Click your avatar (bottom left) → API info
 - **Page ID**: Visible in the URL when managing your page (`manage.statuspage.io/pages/<page_id>`)
-- **Component IDs**: Listed in the URL when editing a component, or via `GET https://api.statuspage.io/v1/pages/<page_id>/components`
 
 ### 3. Add the GitHub secret
 
@@ -241,29 +283,22 @@ From your Statuspage management dashboard:
 |--------|-------------|
 | `STATUSPAGE_API_KEY` | Your Statuspage API key |
 
-### 4. Configure component mappings
+### 4. Configure in config.yaml
 
-Edit `config/statuspage.json` to map your Grafana check job labels to Statuspage component and metric IDs:
+Add your page ID to `config/config.yaml`:
 
-```json
-{
-  "page_id": "your-page-id",
-  "component_mapping": {
-    "example-api": {
-      "name": "Example API",
-      "component_id": "your-component-id",
-      "metric_id": "your-metric-id-or-empty"
-    }
-  },
-  "incidents": {
-    "auto_create": true,
-    "auto_postmortem": true,
-    "notify_subscribers": true
-  }
-}
+```yaml
+statuspage:
+  page_id: "your-page-id"
+
+endpoints:
+  my-api:
+    name: "My API"
+    component: true
+    metric: true
 ```
 
-The `name` field must match the component name in `config/checks.json`. The `metric_id` is optional — leave it empty (`""`) to skip latency metric submission for that component. The free tier allows 2 metrics.
+Set `component: true` to create/sync the component to Statuspage, and `metric: true` to track latency metrics. The free tier allows 2 metrics.
 
 ### 5. Auto-provision components and metrics (optional)
 
@@ -319,11 +354,45 @@ Component status maps to incident impact as follows:
 
 Detection is stateless — each run queries Statuspage for unresolved incidents via `GET /incidents/unresolved` and matches them to components. No local state files needed.
 
-To disable incident automation, set `"auto_create": false` in the `incidents` block of `config/statuspage.json`. Postmortems can be independently disabled with `"auto_postmortem": false`.
+To disable incident automation, set `auto_create: false` in the `incidents` block of `config/config.yaml`. Postmortems can be independently disabled with `auto_postmortem: false`.
 
 ### 7. Enable the workflow
 
 The `statuspage.yml` workflow runs on the same 5-minute cron as the monitor. It first runs `monitor.py` to generate fresh metrics, then syncs to Statuspage. This makes it fully independent from the GitHub Pages workflow.
+
+## GitOps workflow
+
+The system uses a GitOps approach where `config.yaml` is the single source of truth.
+
+**Workflow:**
+
+1. **Edit config.yaml** — add or modify endpoints, set thresholds, enable Statuspage components/metrics, configure incident automation.
+2. **Push to GitHub** — the `reconcile.yml` workflow auto-triggers on changes to `config/config.yaml`.
+3. **Reconciliation engine** — `reconcile.py` reads your configuration and:
+   - Creates/updates Grafana synthetic monitoring checks for each endpoint
+   - Creates/updates Statuspage components and metrics (if enabled)
+   - Generates `config/checks.json` and `config/statuspage.json` from the config
+   - Commits generated files back to the repo automatically
+4. **Monitoring** — `monitor.py` runs every 5 minutes, reading the generated `checks.json` to determine status.
+
+**Deletion safety:**
+
+When you remove an endpoint from `config.yaml`, the orphaned Grafana check or Statuspage component is preserved by default. To enable automatic deletion of orphaned resources, set the environment variable:
+
+```bash
+ALLOW_DELETIONS=true
+```
+
+Add this to your GitHub Actions secrets or set it in the `reconcile.yml` workflow.
+
+**Manual trigger:**
+
+You can also trigger reconciliation manually from the GitHub Actions tab:
+
+1. Go to **Actions** → **GitOps Reconciliation** → **Run workflow**
+2. Click **Run workflow**
+
+This is useful if you need to re-provision resources or sync without pushing code changes.
 
 ## Important notes
 

@@ -1,0 +1,45 @@
+statuspage:
+  page_id: "w7y1d1jrz920"
+
+settings:
+  reachability_query_window: "15m"
+  latency_query_window: "5m"
+  thresholds:
+    reachability:
+      operational: 95
+      degraded: 75
+    latency_ms:
+      operational: 200
+      degraded: 1000
+
+incidents:
+  auto_create: true
+  auto_resolve: true
+  auto_postmortem: true
+  notify_subscribers: true
+
+endpoints:
+  example-api:
+    name: "Example API"
+    url: "https://httpbin.org/get"
+    description: "Example endpoint — replace with your own"
+    frequency: 60000
+    probes: [1, 2, 3]
+    component: true
+    metric: true
+
+  caelicode-com:
+    name: "caelicode.com"
+    url: "https://caelicode.com"
+    description: "CaeliCode Solutions website"
+    frequency: 300000
+    probes: [1, 2, 3]
+    component: true
+    metric: true
+    thresholds:
+      reachability:
+        operational: 95
+        degraded: 75
+      latency_ms:
+        operational: 2000
+        degraded: 5000
