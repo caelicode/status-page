@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from atlassian_statuspage.client import StatuspageClient, StatuspageError
+from atlassian_statuspage.incident_manager import process_incidents
 
 logging.basicConfig(
     level=logging.INFO,
@@ -110,6 +111,40 @@ def main() -> int:
     logger.info(
         "Sync complete: %d updated, %d failed", len(updated), len(failed)
     )
+
+    incident_settings = config.get("incidents", {})
+    auto_incidents = incident_settings.get("auto_create", True)
+    auto_postmortem = incident_settings.get("auto_postmortem", True)
+    notify_subscribers = incident_settings.get("notify_subscribers", True)
+
+    if auto_incidents:
+        logger.info("Running incident automation...")
+        incident_result = process_incidents(
+            client=client,
+            component_mapping=component_mapping,
+            status_report=report,
+            auto_incidents=auto_incidents,
+            auto_postmortem=auto_postmortem,
+            notify_subscribers=notify_subscribers,
+        )
+
+        if incident_result["created"]:
+            logger.info(
+                "Incidents created: %s",
+                ", ".join(i["component"] for i in incident_result["created"]),
+            )
+        if incident_result["resolved"]:
+            logger.info(
+                "Incidents resolved: %s",
+                ", ".join(i["component"] for i in incident_result["resolved"]),
+            )
+        if incident_result["errors"]:
+            logger.warning(
+                "Incident errors: %s",
+                "; ".join(incident_result["errors"]),
+            )
+    else:
+        logger.info("Incident automation disabled in config")
 
     if failed:
         logger.error("Failed components: %s", ", ".join(failed))
