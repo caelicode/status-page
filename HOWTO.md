@@ -344,7 +344,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-All 168 tests should pass. Tests use mocks and don't require any API keys or network access.
+All 178 tests should pass. Tests use mocks and don't require any API keys or network access.
 
 ---
 
@@ -370,7 +370,9 @@ If Prometheus returns no data for a check (the job label doesn't exist yet, or t
 
 **Reconcile workflow fails**
 Check the GitHub Actions logs for errors. Common issues:
-- Missing Grafana or Statuspage API credentials (check repository secrets)
-- Malformed `config.yaml` (validate YAML syntax)
-- Invalid probe IDs in the `probes` list
-- Statuspage rate limiting (wait a few minutes and retry)
+- Missing Grafana SM credentials — the reconcile workflow needs `GRAFANA_SM_TOKEN`, `GRAFANA_STACK_ID`, `GRAFANA_METRICS_INSTANCE_ID`, and `GRAFANA_LOGS_INSTANCE_ID` as repository secrets. See the README "Get your Grafana Cloud credentials" section for where to find each value.
+- `GRAFANA_SM_URL` wrong or missing — defaults to `https://synthetic-monitoring-api-us-east-0.grafana.net`. Only set this secret if your Synthetic Monitoring backend address is different (check Grafana → Synthetic Monitoring → Config → Backend address).
+- Missing Statuspage API key — add `STATUSPAGE_API_KEY` to repository secrets.
+- Malformed `config.yaml` — validate YAML syntax before pushing.
+- Invalid probe IDs in the `probes` list.
+- Statuspage rate limiting — wait a few minutes and retry.

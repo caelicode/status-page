@@ -103,30 +103,40 @@ Sign up at [grafana.com](https://grafana.com/auth/sign-up/create-user?pg=pricing
 
 ### 2. Get your Grafana Cloud credentials
 
-From your Grafana Cloud portal:
+**Monitoring credentials** (needed for the 5-minute cron that queries metrics):
 
-- **Prometheus URL**: Your Grafana Cloud → Prometheus → Details → Remote Write/Query Endpoint (the `/api/prom/api/v1/query` URL)
-- **User ID / Instance ID**: Shown on the Prometheus details page
-- **API Key**: Grafana Cloud → API Keys → Create with `MetricsPublisher` role
+1. Go to [grafana.com](https://grafana.com) → **My Account** → your stack
+2. Under the **Prometheus** card, click **Details**
+3. Note the **Instance ID / User** (this is `GRAFANA_PROMETHEUS_USER_ID`)
+4. Copy the **Remote Read URL** — it looks like `https://prometheus-prod-XX-prod-XX-XXXX.grafana.net/api/prom` (this is the base for `GRAFANA_PROMETHEUS_URL`; append `/api/v1/query` to get the full query endpoint)
+5. Go to **API Keys** (left sidebar under Security) → **Create API Key** with role `MetricsPublisher` (this is `GRAFANA_API_KEY`)
 
-For provisioning (optional, you can create checks in the UI instead):
+**Synthetic Monitoring credentials** (needed for the reconcile workflow that auto-provisions checks):
 
-- **Synthetic Monitoring Token**: Grafana Cloud → Synthetic Monitoring → Config → Generate API token
-- **Stack ID, Metrics Instance ID, Logs Instance ID**: Grafana Cloud → your stack details
+1. Go to your Grafana instance → **Synthetic Monitoring** (left sidebar under Testing & synthetics)
+2. Click **Config** (gear icon at the top)
+3. Under **API Access Token**, click **Generate token** — this is `GRAFANA_SM_TOKEN`
+4. On the same Config page, note the **Backend address** URL — this is `GRAFANA_SM_URL` (defaults to `https://synthetic-monitoring-api-us-east-0.grafana.net` if not set)
+5. Go back to [grafana.com](https://grafana.com) → **My Account** → your stack:
+   - The **Stack ID** is in the URL: `grafana.com/orgs/<org>/stacks/<stack_id>` — this is `GRAFANA_STACK_ID`
+   - Under the **Prometheus** card, the **Instance ID** is `GRAFANA_METRICS_INSTANCE_ID`
+   - Under the **Loki** card, the **Instance ID** is `GRAFANA_LOGS_INSTANCE_ID`
 
 ### 3. Add GitHub secrets
 
-Go to your repo → Settings → Secrets and variables → Actions, and add:
+Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**, and add each of the following:
 
-| Secret | Description |
-|--------|-------------|
-| `GRAFANA_PROMETHEUS_URL` | Prometheus query endpoint |
-| `GRAFANA_PROMETHEUS_USER_ID` | Prometheus instance/user ID |
-| `GRAFANA_API_KEY` | Grafana Cloud API key |
-| `GRAFANA_SM_TOKEN` | *(setup only)* Synthetic monitoring token |
-| `GRAFANA_STACK_ID` | *(setup only)* Stack ID |
-| `GRAFANA_METRICS_INSTANCE_ID` | *(setup only)* Metrics instance ID |
-| `GRAFANA_LOGS_INSTANCE_ID` | *(setup only)* Logs instance ID |
+| Secret | Used by | Description |
+|--------|---------|-------------|
+| `GRAFANA_PROMETHEUS_URL` | monitor, reconcile | Prometheus query endpoint (e.g. `https://prometheus-prod-XX-....grafana.net/api/prom/api/v1/query`) |
+| `GRAFANA_PROMETHEUS_USER_ID` | monitor, reconcile | Prometheus instance/user ID (numeric, found on the Prometheus details page) |
+| `GRAFANA_API_KEY` | monitor, reconcile | Grafana Cloud API key with `MetricsPublisher` role |
+| `GRAFANA_SM_TOKEN` | reconcile | Synthetic Monitoring API access token (from Synthetic Monitoring → Config → Generate token) |
+| `GRAFANA_SM_URL` | reconcile | Synthetic Monitoring backend address (optional — defaults to `https://synthetic-monitoring-api-us-east-0.grafana.net`) |
+| `GRAFANA_STACK_ID` | reconcile | Your Grafana Cloud stack ID (numeric, from the stack URL on grafana.com) |
+| `GRAFANA_METRICS_INSTANCE_ID` | reconcile | Prometheus instance ID (numeric, from the Prometheus card on grafana.com) |
+| `GRAFANA_LOGS_INSTANCE_ID` | reconcile | Loki instance ID (numeric, from the Loki card on grafana.com) |
+| `STATUSPAGE_API_KEY` | statuspage, reconcile | Atlassian Statuspage API key (see Statuspage section below) |
 
 ### 4. Define your configuration
 
@@ -260,7 +270,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-The test suite includes 168 tests (29 new reconciliation tests for the GitOps workflow).
+The test suite includes 178 tests covering monitoring, Statuspage sync, incident automation, management CLI, and GitOps reconciliation.
 
 ## Atlassian Statuspage integration (optional)
 
