@@ -4,18 +4,71 @@ Automated service status page powered by Grafana Cloud (free tier), GitHub Actio
 
 **Live status pages:** [GitHub Pages](https://caelicode.github.io/status-page/) · [Atlassian Statuspage](https://caelicode.statuspage.io/)
 
+**[How-To Guide](HOWTO.md)** — step-by-step instructions for adding endpoints, managing components/metrics, incident settings, and troubleshooting.
+
 ## How it works
 
-```
-Grafana Synthetic Monitoring        GitHub Actions (every 5 min)       GitHub Pages
- probes your endpoints        ──►   queries Prometheus metrics    ──►  serves static
- stores metrics in Prometheus       determines status                  status page
-                                    deploys to Pages
-                                         │
-                                         └──►  Atlassian Statuspage (optional)
-                                               syncs component status + metrics
-                                               auto-creates/resolves incidents
-                                               auto-generates postmortems
+```mermaid
+flowchart TB
+    subgraph ENDPOINTS["Your Endpoints"]
+        EP1["API"]
+        EP2["Website"]
+    end
+
+    subgraph GRAFANA["Grafana Cloud · Free Tier"]
+        SM["Synthetic Monitoring<br/>HTTP probes every 60s"]
+        PROM[("Prometheus<br/>metrics store")]
+        SM -- "reachability + latency" --> PROM
+    end
+
+    SM -. "probes" .-> EP1
+    SM -. "probes" .-> EP2
+
+    subgraph CONFIG["Config Files"]
+        CJ["config/checks.json<br/>endpoints, thresholds"]
+        SPJ["config/statuspage.json<br/>component + metric IDs"]
+    end
+
+    subgraph GHA["GitHub Actions"]
+        subgraph WF1["monitor.yml · every 5 min"]
+            MON["monitor.py<br/>query Prometheus → determine status"]
+            MON -- "writes" --> SJ["github-pages/status.json"]
+            SJ -- "deploy via Pages API" --> GP["GitHub Pages<br/>static status site"]
+        end
+
+        subgraph WF2["statuspage.yml · every 5 min"]
+            SYNC["sync.py<br/>push component status + metrics"]
+            IM["incident_manager.py<br/>create · update · resolve · postmortem"]
+            SYNC -- "triggers" --> IM
+        end
+
+        subgraph WF3["statuspage.yml · manual trigger"]
+            MGR["manage.py CLI<br/>sync-components · sync-metrics<br/>list-* · delete-* · cleanup"]
+        end
+
+        subgraph WF4["setup.yml · manual trigger"]
+            PROV["provision.py<br/>create Grafana checks"]
+        end
+    end
+
+    PROM -- "PromQL queries" --> MON
+    CJ -- "reads" --> MON
+    CJ -- "reads" --> PROV
+    PROV -- "create checks" --> SM
+    SJ -- "reads" --> SYNC
+    SPJ -- "reads" --> SYNC
+    CJ -- "reads" --> MGR
+    SPJ -- "reads + updates" --> MGR
+    SYNC -- "component status + metrics" --> SP
+    IM -- "incidents + postmortems" --> SP
+    MGR -- "CRUD components + metrics" --> SP
+
+    subgraph ATLASSIAN["Atlassian Statuspage · Optional"]
+        SP["Status Page<br/>components · metrics · incidents"]
+    end
+
+    GP -. "public status page" .-> USERS["Users / Subscribers"]
+    SP -. "public status page + notifications" .-> USERS
 ```
 
 1. **Grafana Cloud** runs synthetic HTTP checks against your endpoints from multiple geographic locations and stores the results as Prometheus metrics.
@@ -23,7 +76,7 @@ Grafana Synthetic Monitoring        GitHub Actions (every 5 min)       GitHub Pa
 3. **GitHub Pages** serves a static HTML page that reads `status.json` and renders the current status. It auto-refreshes every 60 seconds in the browser.
 4. **Atlassian Statuspage** *(optional)* — an independent workflow reads the generated `status.json` and syncs component statuses, latency metrics, and manages the full incident lifecycle (create → update → resolve → postmortem) automatically.
 
-No commit spam — the workflow deploys directly via the Pages API without committing status updates to the repo.
+No commit spam — the monitor workflow deploys directly via the Pages API without committing status updates to the repo.
 
 ## Prerequisites
 
@@ -237,7 +290,15 @@ STATUSPAGE_API_KEY=your-key python -m atlassian_statuspage.manage cleanup -y
 
 The `sync-components` command is idempotent: it skips any check that already has a `component_id` in the config, adopts existing Statuspage components by name, and only creates new ones when needed. Similarly, `sync-metrics` skips checks that already have a `metric_id`.
 
-You can also run these from GitHub Actions without CLI access. Go to Actions → **Sync to Atlassian Statuspage** → **Run workflow**, then select a management command from the dropdown (sync-components, sync-metrics, list-components, list-metrics, or list-incidents). When a management command is selected, the normal sync flow is skipped.
+Component and metric provisioning does not have its own workflow — it shares the `statuspage.yml` workflow via a manual trigger dropdown. To run management commands from GitHub Actions without needing local CLI access:
+
+1. Go to **Actions** → **Sync to Atlassian Statuspage** → **Run workflow**
+2. Select a command from the dropdown: `sync-components`, `sync-metrics`, `list-components`, `list-metrics`, or `list-incidents`
+3. Click **Run workflow**
+
+When a management command is selected, the normal sync flow is skipped entirely. For commands that modify config (`sync-components`, `sync-metrics`), the workflow automatically commits the updated `config/statuspage.json` back to the repo so the new component and metric IDs persist.
+
+Delete commands (`delete-component`, `delete-metric`, `cleanup`) require a job label argument so they must be run from the local CLI.
 
 ### 6. Automated incident management
 

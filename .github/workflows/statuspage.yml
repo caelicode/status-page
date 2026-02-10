@@ -24,6 +24,9 @@ on:
           - 'list-metrics'
           - 'list-incidents'
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -46,6 +49,16 @@ jobs:
         env:
           STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
         run: python -m atlassian_statuspage.manage ${{ github.event.inputs.manage_command }}
+
+      - name: Commit config changes
+        if: ${{ github.event.inputs.manage_command == 'sync-components' || github.event.inputs.manage_command == 'sync-metrics' }}
+        run: |
+          git diff --quiet config/statuspage.json && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/statuspage.json
+          git commit -m "chore: update statuspage config from ${{ github.event.inputs.manage_command }}"
+          git push
 
       - name: Run monitor
         if: ${{ github.event.inputs.manage_command == '' }}
