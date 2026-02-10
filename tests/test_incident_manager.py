@@ -7,6 +7,7 @@ from atlassian_statuspage.incident_manager import (
     find_open_incident_for_component,
     generate_incident_name,
     generate_incident_body,
+    generate_update_body,
     generate_resolve_body,
     generate_postmortem,
     process_incidents,
@@ -67,26 +68,71 @@ class TestGenerateIncidentName:
 class TestGenerateIncidentBody:
 
     def test_includes_component_name(self):
-        body = generate_incident_body("API", "degraded_performance", 95.0, 350.0)
+        body = generate_incident_body("API", "degraded_performance")
         assert "API" in body
 
-    def test_includes_metrics(self):
-        body = generate_incident_body("API", "degraded_performance", 85.5, 1200.0)
-        assert "85.5%" in body
-        assert "1200ms" in body
-
     def test_degraded_message(self):
-        body = generate_incident_body("API", "degraded_performance", None, None)
+        body = generate_incident_body("API", "degraded_performance")
         assert "degraded performance" in body
+        assert "investigating" in body.lower() or "updates" in body.lower()
 
     def test_outage_message(self):
-        body = generate_incident_body("API", "major_outage", None, None)
+        body = generate_incident_body("API", "major_outage")
         assert "major outage" in body
+        assert "restore" in body.lower()
 
-    def test_none_metrics_omitted(self):
-        body = generate_incident_body("API", "major_outage", None, None)
+    def test_no_raw_metrics(self):
+        body = generate_incident_body("API", "major_outage")
         assert "Reachability" not in body
         assert "Latency" not in body
+        assert "%" not in body
+        assert "ms" not in body
+
+    def test_no_embedded_timestamp(self):
+        body = generate_incident_body("API", "degraded_performance")
+        assert "UTC" not in body
+
+    def test_unknown_status_fallback(self):
+        body = generate_incident_body("API", "partial_outage")
+        assert "API" in body
+        assert "investigating" in body.lower()
+
+
+class TestGenerateUpdateBody:
+
+    def test_degraded_update(self):
+        body = generate_update_body("API", "degraded_performance")
+        assert "API" in body
+        assert "identified" in body.lower() or "working" in body.lower()
+
+    def test_outage_update(self):
+        body = generate_update_body("API", "major_outage")
+        assert "API" in body
+        assert "unavailable" in body.lower() or "restoring" in body.lower()
+
+    def test_escalation_body(self):
+        body = generate_update_body("API", "major_outage", escalated=True)
+        assert "API" in body
+        assert "escalated" in body.lower()
+        assert "urgently" in body.lower()
+
+    def test_no_escalation_no_escalation_language(self):
+        body = generate_update_body("API", "major_outage", escalated=False)
+        assert "escalated" not in body.lower()
+
+    def test_no_raw_metrics(self):
+        body = generate_update_body("API", "degraded_performance")
+        assert "Reachability" not in body
+        assert "Latency" not in body
+
+    def test_no_embedded_timestamp(self):
+        body = generate_update_body("API", "major_outage")
+        assert "UTC" not in body
+
+    def test_differs_from_creation_body(self):
+        create_body = generate_incident_body("API", "degraded_performance")
+        update_body = generate_update_body("API", "degraded_performance")
+        assert create_body != update_body
 
 
 class TestGenerateResolveBody:
@@ -95,7 +141,14 @@ class TestGenerateResolveBody:
         body = generate_resolve_body("caelicode.com")
         assert "caelicode.com" in body
         assert "resolved" in body
-        assert "operational" in body
+
+    def test_no_embedded_timestamp(self):
+        body = generate_resolve_body("API")
+        assert "UTC" not in body
+
+    def test_professional_tone(self):
+        body = generate_resolve_body("API")
+        assert "patience" in body.lower() or "normal" in body.lower()
 
 
 class TestGeneratePostmortem:

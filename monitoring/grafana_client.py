@@ -132,7 +132,7 @@ class SyntheticMonitoringClient:
         if not self._access_token or not self._tenant_id:
             raise GrafanaClientError("Must call register() first")
 
-    def check_exists(self, job_name: str) -> bool:
+    def list_checks(self) -> list:
         self._ensure_registered()
 
         try:
@@ -146,14 +146,88 @@ class SyntheticMonitoringClient:
                 timeout=30,
             )
             response.raise_for_status()
-
-            for check in response.json():
-                if check.get("job") == job_name:
-                    return True
-            return False
+            return response.json()
 
         except requests.RequestException as e:
             raise GrafanaClientError(f"Failed to list checks: {e}") from e
+
+    def check_exists(self, job_name: str) -> bool:
+        self._ensure_registered()
+
+        checks = self.list_checks()
+        for check in checks:
+            if check.get("job") == job_name:
+                return True
+        return False
+
+    def delete_check(self, check_id: int) -> None:
+        self._ensure_registered()
+
+        try:
+            response = self._session.post(
+                f"{self.config.synthetic_monitoring_url}/api/v1/check/delete",
+                headers={
+                    "Authorization": f"Bearer {self._access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"tenantId": self._tenant_id, "id": check_id},
+                timeout=30,
+            )
+            response.raise_for_status()
+            logger.info("Deleted check ID: %s", check_id)
+
+        except requests.RequestException as e:
+            raise GrafanaClientError(
+                f"Failed to delete check {check_id}: {e}"
+            ) from e
+
+    def update_check(
+        self,
+        check_id: int,
+        job_name: str,
+        target_url: str,
+        frequency_ms: int = 60000,
+        timeout_ms: int = 5000,
+        probe_ids: Optional[list] = None,
+        headers: Optional[list] = None,
+    ) -> dict:
+        self._ensure_registered()
+
+        if probe_ids is None:
+            probe_ids = [1, 2, 3]
+
+        settings = {"http": {"method": "GET", "validStatusCodes": [200]}}
+        if headers:
+            settings["http"]["headers"] = headers
+
+        try:
+            response = self._session.post(
+                f"{self.config.synthetic_monitoring_url}/api/v1/check/update",
+                headers={
+                    "Authorization": f"Bearer {self._access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "tenantId": self._tenant_id,
+                    "id": check_id,
+                    "job": job_name,
+                    "target": target_url,
+                    "probes": probe_ids,
+                    "frequency": frequency_ms,
+                    "timeout": timeout_ms,
+                    "enabled": True,
+                    "settings": settings,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            logger.info("Updated check: %s", job_name)
+            return response.json()
+
+        except requests.RequestException as e:
+            raise GrafanaClientError(
+                f"Failed to update check '{job_name}': {e}"
+            ) from e
 
     def create_check(
         self,

@@ -1,6 +1,10 @@
-name: Provision Infrastructure (Manual)
+name: Reconcile Infrastructure
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'config.yaml'
   workflow_dispatch:
     inputs:
       allow_deletions:
@@ -12,7 +16,7 @@ permissions:
   contents: write
 
 jobs:
-  provision:
+  reconcile:
     runs-on: ubuntu-latest
 
     steps:

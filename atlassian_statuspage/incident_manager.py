@@ -42,33 +42,53 @@ def generate_incident_name(component_name: str, status: str) -> str:
     return f"{component_name} experiencing {description}"
 
 
-def generate_incident_body(
-    component_name: str, status: str, reachability: Optional[float], latency: Optional[float]
-) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = [f"**{now}** — Automated monitoring detected an issue with **{component_name}**."]
-
-    metrics = []
-    if reachability is not None:
-        metrics.append(f"Reachability: {reachability:.1f}%")
-    if latency is not None:
-        metrics.append(f"Latency: {latency:.0f}ms")
-    if metrics:
-        lines.append(f"Current metrics: {', '.join(metrics)}.")
-
+def generate_incident_body(component_name: str, status: str) -> str:
+    if status == "major_outage":
+        return (
+            f"We're aware of a major outage affecting **{component_name}**. "
+            f"Our team is actively investigating and working to restore service "
+            f"as quickly as possible."
+        )
     if status == "degraded_performance":
-        lines.append("The service is experiencing degraded performance. We are investigating.")
-    elif status == "major_outage":
-        lines.append("The service is experiencing a major outage. We are investigating.")
+        return (
+            f"We're investigating reports of degraded performance affecting "
+            f"**{component_name}**. Some users may experience slower response times "
+            f"or intermittent errors. We'll provide updates as we learn more."
+        )
+    return (
+        f"We're investigating an issue affecting **{component_name}**. "
+        f"We'll provide updates as we learn more."
+    )
 
-    return "\n\n".join(lines)
+
+def generate_update_body(
+    component_name: str, status: str, escalated: bool = False
+) -> str:
+    if escalated:
+        return (
+            f"The situation affecting **{component_name}** has escalated to a major "
+            f"service disruption. Our team is working urgently to restore normal operation."
+        )
+    if status == "major_outage":
+        return (
+            f"Our team continues to work on restoring **{component_name}**. "
+            f"The service remains unavailable. We'll provide another update shortly."
+        )
+    if status == "degraded_performance":
+        return (
+            f"We've identified the issue affecting **{component_name}** and are "
+            f"working on a fix. The service continues to operate with reduced performance."
+        )
+    return (
+        f"We continue to monitor the issue affecting **{component_name}**. "
+        f"Another update will follow shortly."
+    )
 
 
 def generate_resolve_body(component_name: str) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return (
-        f"**{now}** — **{component_name}** has returned to normal operation. "
-        f"All systems are operational. This incident has been resolved."
+        f"This incident has been resolved. **{component_name}** is back to normal "
+        f"operation. Thank you for your patience."
     )
 
 
@@ -178,17 +198,13 @@ def process_incidents(
         current_status = COMPONENT_STATUS_MAP.get(
             comp_data["status"], "major_outage"
         )
-        reachability = comp_data.get("reachability")
-        latency = comp_data.get("latency_ms")
         is_healthy = current_status == "operational"
 
         open_incident = find_open_incident_for_component(unresolved, component_id)
 
         if not is_healthy and open_incident is None:
             incident_name = generate_incident_name(component_name, current_status)
-            incident_body = generate_incident_body(
-                component_name, current_status, reachability, latency
-            )
+            incident_body = generate_incident_body(component_name, current_status)
             impact = STATUS_TO_IMPACT.get(current_status, "minor")
 
             try:
@@ -217,12 +233,12 @@ def process_incidents(
 
         elif not is_healthy and open_incident is not None:
             incident_id = open_incident["id"]
-            update_body = generate_incident_body(
-                component_name, current_status, reachability, latency
-            )
             new_impact = STATUS_TO_IMPACT.get(current_status, "minor")
             old_impact = open_incident.get("impact", "minor")
             impact_escalated = new_impact != old_impact
+            update_body = generate_update_body(
+                component_name, current_status, escalated=impact_escalated
+            )
             new_name = generate_incident_name(component_name, current_status)
 
             try:
