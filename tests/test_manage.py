@@ -18,8 +18,6 @@ from atlassian_statuspage.manage import (
 )
 
 
-# ── Config loading tests ─────────────────────────────────────────────
-
 
 class TestLoadChecksConfig:
 
@@ -60,8 +58,6 @@ class TestSaveStatuspageConfig:
         assert "new" in loaded
         assert "old" not in loaded
 
-
-# ── sync-components tests ────────────────────────────────────────────
 
 
 class TestSyncComponents:
@@ -142,8 +138,6 @@ class TestSyncComponents:
         assert saved_config["component_mapping"]["api"]["component_id"] == "existing-c1"
 
 
-# ── sync-metrics tests ───────────────────────────────────────────────
-
 
 class TestSyncMetrics:
 
@@ -193,8 +187,6 @@ class TestSyncMetrics:
         mock_client.create_metric.assert_not_called()
 
 
-# ── delete-component tests ───────────────────────────────────────────
-
 
 class TestDeleteComponent:
 
@@ -235,8 +227,6 @@ class TestDeleteComponent:
         result = cmd_delete_component(args)
         assert result == 1
 
-
-# ── delete-metric tests ──────────────────────────────────────────────
 
 
 class TestDeleteMetric:
@@ -284,8 +274,6 @@ class TestDeleteMetric:
         mock_client.delete_metric.assert_not_called()
 
 
-# ── list commands tests ──────────────────────────────────────────────
-
 
 class TestListCommands:
 
@@ -323,8 +311,6 @@ class TestListCommands:
         result = cmd_list_components(args)
         assert result == 0
 
-
-# ── cleanup tests ────────────────────────────────────────────────────
 
 
 class TestCleanup:

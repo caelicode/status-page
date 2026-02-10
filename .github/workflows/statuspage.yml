@@ -39,14 +39,12 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Management command (if specified via workflow_dispatch)
       - name: Run management command
         if: ${{ github.event.inputs.manage_command != '' }}
         env:
           STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
         run: python -m atlassian_statuspage.manage ${{ github.event.inputs.manage_command }}
 
-      # Normal sync flow (skip if running a management command)
       - name: Run monitor
         if: ${{ github.event.inputs.manage_command == '' }}
         env:

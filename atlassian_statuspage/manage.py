@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""CLI tool for managing Statuspage components and metrics.
-
-Usage:
-    python -m atlassian_statuspage.manage <command> [options]
-
-Commands:
-    sync-components     Auto-create components from checks.json, update config
-    sync-metrics        Auto-create latency metrics for each component, update config
-    delete-component    Delete a component by job label
-    delete-metric       Delete a metric by job label
-    list-components     List all components on the page
-    list-metrics        List all metrics on the page
-    list-incidents      List all incidents on the page
-    cleanup             Delete all components and metrics managed by this tool
-"""
 
 import argparse
 import json
@@ -72,12 +57,10 @@ def get_client():
 
 
 def cmd_sync_components(args):
-    """Create Statuspage components from checks.json and update config."""
     client, sp_config = get_client()
     checks = load_checks_config()
     component_mapping = sp_config.get("component_mapping", {})
 
-    # Fetch existing components from Statuspage
     try:
         existing = client.list_components()
     except StatuspageError as e:
@@ -94,14 +77,12 @@ def cmd_sync_components(args):
         job_label = check["job_label"]
         description = check.get("description", "")
 
-        # Check if already in our config with a component_id
         if job_label in component_mapping and component_mapping[job_label].get("component_id"):
             logger.info("  %s — already configured (component_id: %s)",
                         name, component_mapping[job_label]["component_id"])
             skipped_count += 1
             continue
 
-        # Check if component already exists on Statuspage by name
         if name in existing_by_name:
             comp_id = existing_by_name[name]["id"]
             logger.info("  %s — exists on Statuspage (ID: %s), updating config", name, comp_id)
@@ -113,7 +94,6 @@ def cmd_sync_components(args):
             skipped_count += 1
             continue
 
-        # Create new component
         try:
             result = client.create_component(
                 name=name,
@@ -140,7 +120,6 @@ def cmd_sync_components(args):
 
 
 def cmd_sync_metrics(args):
-    """Create latency metrics for each component and update config."""
     client, sp_config = get_client()
     component_mapping = sp_config.get("component_mapping", {})
 
@@ -148,7 +127,6 @@ def cmd_sync_metrics(args):
         logger.warning("No component mappings — run sync-components first")
         return 0
 
-    # Fetch existing metrics from Statuspage
     try:
         existing = client.list_metrics()
     except StatuspageError as e:
@@ -164,13 +142,11 @@ def cmd_sync_metrics(args):
         name = mapping.get("name", job_label)
         metric_name = f"{name} Latency"
 
-        # Already has a metric_id
         if mapping.get("metric_id"):
             logger.info("  %s — already has metric (ID: %s)", name, mapping["metric_id"])
             skipped_count += 1
             continue
 
-        # Check if metric exists on Statuspage by name
         if metric_name in existing_by_name:
             metric_id = existing_by_name[metric_name]["id"]
             logger.info("  %s — metric exists on Statuspage (ID: %s), updating config",
@@ -179,7 +155,6 @@ def cmd_sync_metrics(args):
             skipped_count += 1
             continue
 
-        # Create new metric
         try:
             result = client.create_metric(
                 name=metric_name,
@@ -202,7 +177,6 @@ def cmd_sync_metrics(args):
 
 
 def cmd_delete_component(args):
-    """Delete a component by job label."""
     client, sp_config = get_client()
     component_mapping = sp_config.get("component_mapping", {})
 
@@ -222,7 +196,6 @@ def cmd_delete_component(args):
         save_statuspage_config(sp_config)
         return 0
 
-    # Delete metric first if it exists
     metric_id = mapping.get("metric_id")
     if metric_id:
         try:
@@ -231,7 +204,6 @@ def cmd_delete_component(args):
         except StatuspageError as e:
             logger.warning("  Failed to delete metric %s: %s", metric_id, e)
 
-    # Delete component
     try:
         client.delete_component(component_id)
         logger.info("  Deleted component %s (%s)", name, component_id)
@@ -248,7 +220,6 @@ def cmd_delete_component(args):
 
 
 def cmd_delete_metric(args):
-    """Delete a metric by job label."""
     client, sp_config = get_client()
     component_mapping = sp_config.get("component_mapping", {})
 
@@ -280,7 +251,6 @@ def cmd_delete_metric(args):
 
 
 def cmd_list_components(args):
-    """List all components on the page."""
     client, _ = get_client()
 
     try:
@@ -305,7 +275,6 @@ def cmd_list_components(args):
 
 
 def cmd_list_metrics(args):
-    """List all metrics on the page."""
     client, _ = get_client()
 
     try:
@@ -327,7 +296,6 @@ def cmd_list_metrics(args):
 
 
 def cmd_list_incidents(args):
-    """List all incidents on the page."""
     client, _ = get_client()
 
     try:
@@ -352,7 +320,6 @@ def cmd_list_incidents(args):
 
 
 def cmd_cleanup(args):
-    """Delete all managed components and metrics from Statuspage."""
     client, sp_config = get_client()
     component_mapping = sp_config.get("component_mapping", {})
 
@@ -372,7 +339,6 @@ def cmd_cleanup(args):
     for job_label, mapping in list(component_mapping.items()):
         name = mapping.get("name", job_label)
 
-        # Delete metric
         metric_id = mapping.get("metric_id")
         if metric_id:
             try:
@@ -381,7 +347,6 @@ def cmd_cleanup(args):
             except StatuspageError as e:
                 logger.warning("  Failed to delete metric for %s: %s", name, e)
 
-        # Delete component
         component_id = mapping.get("component_id")
         if component_id:
             try:
@@ -405,8 +370,6 @@ def cmd_cleanup(args):
 def main():
     parser = argparse.ArgumentParser(
         description="Manage Statuspage components, metrics, and incidents",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
     )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 

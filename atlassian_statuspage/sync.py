@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Sync monitoring data to Atlassian Statuspage.
-
-Reads the generated status.json and:
-  1. Updates component statuses on Statuspage
-  2. Submits latency metrics (if configured)
-  3. Manages incident lifecycle (auto-create, update, resolve, postmortem)
-"""
 
 import json
 import logging
@@ -75,7 +68,6 @@ def main() -> int:
         logger.warning("No component mappings in config/statuspage.json — nothing to sync")
         return 0
 
-    # ── Phase 1: Update component statuses and submit metrics ───────
     updated = []
     failed = []
 
@@ -120,7 +112,6 @@ def main() -> int:
         "Sync complete: %d updated, %d failed", len(updated), len(failed)
     )
 
-    # ── Phase 2: Incident automation ────────────────────────────────
     incident_settings = config.get("incidents", {})
     auto_incidents = incident_settings.get("auto_create", True)
     auto_postmortem = incident_settings.get("auto_postmortem", True)

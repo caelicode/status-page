@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Automated incident lifecycle management for Atlassian Statuspage.
-
-Detects status transitions and manages the full incident lifecycle:
-  operational → degraded/outage  ──►  create incident
-  degraded ↔ outage              ──►  update incident
-  degraded/outage → operational  ──►  resolve incident + auto-postmortem
-"""
 
 import logging
 from datetime import datetime, timezone
@@ -15,20 +8,17 @@ from atlassian_statuspage.client import StatuspageClient, StatuspageError
 
 logger = logging.getLogger(__name__)
 
-# Map our internal status values to Statuspage component statuses
 COMPONENT_STATUS_MAP = {
     "operational": "operational",
     "degraded_performance": "degraded_performance",
     "major_outage": "major_outage",
 }
 
-# Map our component status to an incident impact level
 STATUS_TO_IMPACT = {
     "degraded_performance": "minor",
     "major_outage": "critical",
 }
 
-# Map our component status to a human-readable description
 STATUS_DISPLAY = {
     "degraded_performance": "degraded performance",
     "major_outage": "a major outage",
@@ -38,7 +28,6 @@ STATUS_DISPLAY = {
 def find_open_incident_for_component(
     unresolved_incidents: list, component_id: str
 ) -> Optional[dict]:
-    """Find an existing unresolved incident that affects a given component."""
     for incident in unresolved_incidents:
         affected_ids = []
         for comp in incident.get("components", []):
@@ -49,7 +38,6 @@ def find_open_incident_for_component(
 
 
 def generate_incident_name(component_name: str, status: str) -> str:
-    """Generate a descriptive incident name."""
     description = STATUS_DISPLAY.get(status, "issues")
     return f"{component_name} experiencing {description}"
 
@@ -57,7 +45,6 @@ def generate_incident_name(component_name: str, status: str) -> str:
 def generate_incident_body(
     component_name: str, status: str, reachability: Optional[float], latency: Optional[float]
 ) -> str:
-    """Generate the incident update body with current metrics."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [f"**{now}** — Automated monitoring detected an issue with **{component_name}**."]
 
@@ -78,7 +65,6 @@ def generate_incident_body(
 
 
 def generate_resolve_body(component_name: str) -> str:
-    """Generate the resolution message."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     return (
         f"**{now}** — **{component_name}** has returned to normal operation. "
@@ -89,11 +75,6 @@ def generate_resolve_body(component_name: str) -> str:
 def generate_postmortem(
     incident: dict, component_name: str, resolve_time: str
 ) -> str:
-    """Generate an auto-postmortem in Markdown format.
-
-    The postmortem includes: summary, timeline, root cause (automated),
-    and a note about resolution.
-    """
     created = incident.get("created_at", "unknown")
     if isinstance(created, str) and "T" in created:
         try:
@@ -105,7 +86,6 @@ def generate_postmortem(
     name = incident.get("name", "Incident")
     impact = incident.get("impact", "unknown")
 
-    # Build timeline from incident updates
     updates = incident.get("incident_updates", [])
     timeline_lines = []
     for update in reversed(updates):
@@ -164,26 +144,12 @@ def process_incidents(
     auto_postmortem: bool = True,
     notify_subscribers: bool = True,
 ) -> dict:
-    """Process status changes and manage the incident lifecycle.
-
-    Args:
-        client: StatuspageClient instance
-        component_mapping: Dict of job_label → {name, component_id, metric_id}
-        status_report: The current status report from status.json
-        auto_incidents: Whether to auto-create/resolve incidents
-        auto_postmortem: Whether to auto-generate postmortems
-        notify_subscribers: Whether to send subscriber notifications
-
-    Returns:
-        Dict with summary: {created: [], updated: [], resolved: [], errors: []}
-    """
     result = {"created": [], "updated": [], "resolved": [], "errors": []}
 
     if not auto_incidents:
         logger.info("Incident automation is disabled — skipping")
         return result
 
-    # Fetch current unresolved incidents from Statuspage
     try:
         unresolved = client.list_unresolved_incidents()
     except StatuspageError as e:
@@ -219,7 +185,6 @@ def process_incidents(
         open_incident = find_open_incident_for_component(unresolved, component_id)
 
         if not is_healthy and open_incident is None:
-            # ── Create new incident ─────────────────────────────────
             incident_name = generate_incident_name(component_name, current_status)
             incident_body = generate_incident_body(
                 component_name, current_status, reachability, latency
@@ -251,7 +216,6 @@ def process_incidents(
                 result["errors"].append(f"Create incident for {component_name}: {e}")
 
         elif not is_healthy and open_incident is not None:
-            # ── Update existing incident ────────────────────────────
             incident_id = open_incident["id"]
             update_body = generate_incident_body(
                 component_name, current_status, reachability, latency
@@ -279,7 +243,6 @@ def process_incidents(
                 result["errors"].append(f"Update incident {incident_id}: {e}")
 
         elif is_healthy and open_incident is not None:
-            # ── Resolve incident + postmortem ───────────────────────
             incident_id = open_incident["id"]
             resolve_body = generate_resolve_body(component_name)
             resolve_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -304,10 +267,8 @@ def process_incidents(
                 result["errors"].append(f"Resolve incident {incident_id}: {e}")
                 continue
 
-            # Auto-postmortem
             if auto_postmortem:
                 try:
-                    # Re-fetch the incident to get full timeline
                     incidents = client.list_incidents()
                     full_incident = None
                     for inc in incidents:

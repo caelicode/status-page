@@ -13,9 +13,6 @@ def client():
     return StatuspageClient(api_key="test-key", page_id="test-page-id")
 
 
-# ── Client Init ─────────────────────────────────────────────────────
-
-
 class TestStatuspageClientInit:
 
     def test_headers_set(self, client):
@@ -29,9 +26,6 @@ class TestStatuspageClientInit:
     def test_url_with_subpath(self, client):
         url = client._url("components/abc123")
         assert url == "https://api.statuspage.io/v1/pages/test-page-id/components/abc123"
-
-
-# ── Components ───────────────────────────────────────────────────────
 
 
 class TestListComponents:
@@ -157,9 +151,6 @@ class TestDeleteComponent:
                 client.delete_component("comp1")
 
 
-# ── Metrics ──────────────────────────────────────────────────────────
-
-
 class TestCreateMetric:
 
     def test_create_metric_payload(self, client):
@@ -230,9 +221,6 @@ class TestSubmitMetricData:
             mock_post.side_effect = requests.ConnectionError("error")
             with pytest.raises(StatuspageError, match="Failed to submit data"):
                 client.submit_metric_data("metric1", 100.0)
-
-
-# ── Incidents ────────────────────────────────────────────────────────
 
 
 class TestListUnresolvedIncidents:
@@ -396,9 +384,6 @@ class TestDeleteIncident:
                 client.delete_incident("inc1")
 
 
-# ── Postmortems ──────────────────────────────────────────────────────
-
-
 class TestCreatePostmortem:
 
     def test_create_postmortem_payload(self, client):
@@ -432,9 +417,6 @@ class TestCreatePostmortem:
             mock_put.side_effect = requests.ConnectionError("fail")
             with pytest.raises(StatuspageError, match="Failed to create postmortem"):
                 client.create_postmortem("inc1", body="report")
-
-
-# ── Sync helpers ─────────────────────────────────────────────────────
 
 
 class TestStatusMap:
