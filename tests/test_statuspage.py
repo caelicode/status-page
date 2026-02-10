@@ -2,7 +2,7 @@ import json
 import time
 import pytest
 import requests
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 from atlassian_statuspage.client import StatuspageClient, StatuspageError
 from atlassian_statuspage.sync import load_statuspage_config, load_status_report, STATUS_MAP
@@ -11,6 +11,9 @@ from atlassian_statuspage.sync import load_statuspage_config, load_status_report
 @pytest.fixture
 def client():
     return StatuspageClient(api_key="test-key", page_id="test-page-id")
+
+
+# ── Client Init ─────────────────────────────────────────────────────
 
 
 class TestStatuspageClientInit:
@@ -26,6 +29,71 @@ class TestStatuspageClientInit:
     def test_url_with_subpath(self, client):
         url = client._url("components/abc123")
         assert url == "https://api.statuspage.io/v1/pages/test-page-id/components/abc123"
+
+
+# ── Components ───────────────────────────────────────────────────────
+
+
+class TestListComponents:
+
+    def test_returns_component_list(self, client):
+        with patch.object(client._session, "get") as mock_get:
+            mock_get.return_value = MagicMock(
+                status_code=200,
+                json=lambda: [{"id": "c1", "name": "API"}],
+            )
+            mock_get.return_value.raise_for_status = MagicMock()
+            result = client.list_components()
+            assert len(result) == 1
+            assert result[0]["name"] == "API"
+
+    def test_failure_raises(self, client):
+        with patch.object(client._session, "get") as mock_get:
+            mock_get.side_effect = requests.Timeout("timeout")
+            with pytest.raises(StatuspageError, match="Failed to list components"):
+                client.list_components()
+
+
+class TestCreateComponent:
+
+    def test_create_with_defaults(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=201)
+            mock_post.return_value.json.return_value = {
+                "id": "new1", "name": "My Service", "status": "operational"
+            }
+            mock_post.return_value.raise_for_status = MagicMock()
+
+            result = client.create_component("My Service", description="A service")
+            assert result["id"] == "new1"
+
+            payload = mock_post.call_args[1]["json"]["component"]
+            assert payload["name"] == "My Service"
+            assert payload["description"] == "A service"
+            assert payload["status"] == "operational"
+            assert payload["showcase"] is True
+            assert payload["only_show_if_degraded"] is False
+            assert "group_id" not in payload
+
+    def test_create_with_group_id(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=201)
+            mock_post.return_value.json.return_value = {"id": "new2"}
+            mock_post.return_value.raise_for_status = MagicMock()
+
+            client.create_component("Grouped", group_id="grp1")
+            payload = mock_post.call_args[1]["json"]["component"]
+            assert payload["group_id"] == "grp1"
+
+    def test_create_invalid_status_raises(self, client):
+        with pytest.raises(StatuspageError, match="Invalid status"):
+            client.create_component("Bad", status="invalid")
+
+    def test_create_failure_raises(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to create component"):
+                client.create_component("Fail")
 
 
 class TestUpdateComponentStatus:
@@ -73,24 +141,58 @@ class TestUpdateComponentStatus:
             )
 
 
-class TestListComponents:
+class TestDeleteComponent:
 
-    def test_returns_component_list(self, client):
-        with patch.object(client._session, "get") as mock_get:
-            mock_get.return_value = MagicMock(
-                status_code=200,
-                json=lambda: [{"id": "c1", "name": "API"}],
-            )
-            mock_get.return_value.raise_for_status = MagicMock()
-            result = client.list_components()
-            assert len(result) == 1
-            assert result[0]["name"] == "API"
+    def test_delete_success(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.return_value = MagicMock(status_code=204)
+            mock_delete.return_value.raise_for_status = MagicMock()
+            client.delete_component("comp1")
+            mock_delete.assert_called_once()
 
-    def test_failure_raises(self, client):
-        with patch.object(client._session, "get") as mock_get:
-            mock_get.side_effect = requests.Timeout("timeout")
-            with pytest.raises(StatuspageError, match="Failed to list components"):
-                client.list_components()
+    def test_delete_failure_raises(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to delete component"):
+                client.delete_component("comp1")
+
+
+# ── Metrics ──────────────────────────────────────────────────────────
+
+
+class TestCreateMetric:
+
+    def test_create_metric_payload(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=201)
+            mock_post.return_value.json.return_value = {"id": "m1", "name": "Latency"}
+            mock_post.return_value.raise_for_status = MagicMock()
+
+            result = client.create_metric("Latency", suffix="ms", tooltip="Response time")
+
+            assert result["name"] == "Latency"
+            call_args = mock_post.call_args
+            payload = call_args[1]["json"]["metric"]
+            assert payload["name"] == "Latency"
+            assert payload["suffix"] == "ms"
+            assert payload["display"] is True
+            assert payload["tooltip_description"] == "Response time"
+
+
+class TestDeleteMetric:
+
+    def test_delete_success(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.return_value = MagicMock(status_code=204)
+            mock_delete.return_value.raise_for_status = MagicMock()
+            client.delete_metric("m1")
+            mock_delete.assert_called_once()
+
+    def test_delete_failure_raises(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to delete metric"):
+                client.delete_metric("m1")
 
 
 class TestSubmitMetricData:
@@ -130,23 +232,209 @@ class TestSubmitMetricData:
                 client.submit_metric_data("metric1", 100.0)
 
 
-class TestCreateMetric:
+# ── Incidents ────────────────────────────────────────────────────────
 
-    def test_create_metric_payload(self, client):
+
+class TestListUnresolvedIncidents:
+
+    def test_returns_list(self, client):
+        with patch.object(client._session, "get") as mock_get:
+            mock_get.return_value = MagicMock(status_code=200)
+            mock_get.return_value.json.return_value = [
+                {"id": "inc1", "status": "investigating"}
+            ]
+            mock_get.return_value.raise_for_status = MagicMock()
+
+            result = client.list_unresolved_incidents()
+            assert len(result) == 1
+            assert result[0]["id"] == "inc1"
+            mock_get.assert_called_once_with(
+                "https://api.statuspage.io/v1/pages/test-page-id/incidents/unresolved",
+                timeout=30,
+            )
+
+    def test_failure_raises(self, client):
+        with patch.object(client._session, "get") as mock_get:
+            mock_get.side_effect = requests.Timeout("timeout")
+            with pytest.raises(StatuspageError, match="Failed to list unresolved"):
+                client.list_unresolved_incidents()
+
+
+class TestCreateIncident:
+
+    def test_create_basic_incident(self, client):
         with patch.object(client._session, "post") as mock_post:
             mock_post.return_value = MagicMock(status_code=201)
-            mock_post.return_value.json.return_value = {"id": "m1", "name": "Latency"}
+            mock_post.return_value.json.return_value = {
+                "id": "inc1", "name": "Test Incident", "status": "investigating"
+            }
             mock_post.return_value.raise_for_status = MagicMock()
 
-            result = client.create_metric("Latency", suffix="ms", tooltip="Response time")
+            result = client.create_incident(
+                name="Test Incident",
+                body="Something broke",
+            )
+            assert result["id"] == "inc1"
 
-            assert result["name"] == "Latency"
-            call_args = mock_post.call_args
-            payload = call_args[1]["json"]["metric"]
-            assert payload["name"] == "Latency"
-            assert payload["suffix"] == "ms"
-            assert payload["display"] is True
-            assert payload["tooltip_description"] == "Response time"
+            payload = mock_post.call_args[1]["json"]["incident"]
+            assert payload["name"] == "Test Incident"
+            assert payload["status"] == "investigating"
+            assert payload["body"] == "Something broke"
+            assert payload["deliver_notifications"] is True
+
+    def test_create_with_components(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=201)
+            mock_post.return_value.json.return_value = {"id": "inc2"}
+            mock_post.return_value.raise_for_status = MagicMock()
+
+            client.create_incident(
+                name="Outage",
+                component_ids=["c1"],
+                components={"c1": "major_outage"},
+                impact_override="critical",
+            )
+
+            payload = mock_post.call_args[1]["json"]["incident"]
+            assert payload["component_ids"] == ["c1"]
+            assert payload["components"] == {"c1": "major_outage"}
+            assert payload["impact_override"] == "critical"
+
+    def test_invalid_status_raises(self, client):
+        with pytest.raises(StatuspageError, match="Invalid incident status"):
+            client.create_incident("Bad", status="broken")
+
+    def test_invalid_impact_raises(self, client):
+        with pytest.raises(StatuspageError, match="Invalid impact"):
+            client.create_incident("Bad", impact_override="extreme")
+
+    def test_failure_raises(self, client):
+        with patch.object(client._session, "post") as mock_post:
+            mock_post.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to create incident"):
+                client.create_incident("Fail")
+
+
+class TestUpdateIncident:
+
+    def test_update_status_and_body(self, client):
+        with patch.object(client._session, "patch") as mock_patch:
+            mock_patch.return_value = MagicMock(status_code=200)
+            mock_patch.return_value.json.return_value = {
+                "id": "inc1", "status": "identified"
+            }
+            mock_patch.return_value.raise_for_status = MagicMock()
+
+            result = client.update_incident(
+                "inc1", status="identified", body="Found the issue"
+            )
+            assert result["status"] == "identified"
+
+            payload = mock_patch.call_args[1]["json"]["incident"]
+            assert payload["status"] == "identified"
+            assert payload["body"] == "Found the issue"
+
+    def test_update_invalid_status_raises(self, client):
+        with pytest.raises(StatuspageError, match="Invalid incident status"):
+            client.update_incident("inc1", status="bad")
+
+    def test_update_with_components(self, client):
+        with patch.object(client._session, "patch") as mock_patch:
+            mock_patch.return_value = MagicMock(status_code=200)
+            mock_patch.return_value.json.return_value = {"id": "inc1"}
+            mock_patch.return_value.raise_for_status = MagicMock()
+
+            client.update_incident(
+                "inc1",
+                components={"c1": "operational"},
+            )
+            payload = mock_patch.call_args[1]["json"]["incident"]
+            assert payload["components"] == {"c1": "operational"}
+
+    def test_failure_raises(self, client):
+        with patch.object(client._session, "patch") as mock_patch:
+            mock_patch.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to update incident"):
+                client.update_incident("inc1", body="update")
+
+
+class TestResolveIncident:
+
+    def test_resolve_calls_update(self, client):
+        with patch.object(client, "update_incident") as mock_update:
+            mock_update.return_value = {"id": "inc1", "status": "resolved"}
+
+            result = client.resolve_incident(
+                "inc1",
+                body="Fixed it.",
+                components={"c1": "operational"},
+            )
+            assert result["status"] == "resolved"
+
+            mock_update.assert_called_once_with(
+                incident_id="inc1",
+                status="resolved",
+                body="Fixed it.",
+                components={"c1": "operational"},
+                deliver_notifications=True,
+            )
+
+
+class TestDeleteIncident:
+
+    def test_delete_success(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.return_value = MagicMock(status_code=204)
+            mock_delete.return_value.raise_for_status = MagicMock()
+            client.delete_incident("inc1")
+            mock_delete.assert_called_once()
+
+    def test_delete_failure_raises(self, client):
+        with patch.object(client._session, "delete") as mock_delete:
+            mock_delete.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to delete incident"):
+                client.delete_incident("inc1")
+
+
+# ── Postmortems ──────────────────────────────────────────────────────
+
+
+class TestCreatePostmortem:
+
+    def test_create_postmortem_payload(self, client):
+        with patch.object(client._session, "put") as mock_put:
+            mock_put.return_value = MagicMock(status_code=200)
+            mock_put.return_value.json.return_value = {
+                "postmortem_body": "# Report"
+            }
+            mock_put.return_value.raise_for_status = MagicMock()
+
+            result = client.create_postmortem(
+                "inc1",
+                body="# Postmortem Report",
+                notify_subscribers=True,
+            )
+
+            mock_put.assert_called_once_with(
+                "https://api.statuspage.io/v1/pages/test-page-id/incidents/inc1/postmortem",
+                json={
+                    "postmortem": {
+                        "body": "# Postmortem Report",
+                        "notify_subscribers": True,
+                        "notify_twitter": False,
+                    }
+                },
+                timeout=30,
+            )
+
+    def test_failure_raises(self, client):
+        with patch.object(client._session, "put") as mock_put:
+            mock_put.side_effect = requests.ConnectionError("fail")
+            with pytest.raises(StatuspageError, match="Failed to create postmortem"):
+                client.create_postmortem("inc1", body="report")
+
+
+# ── Sync helpers ─────────────────────────────────────────────────────
 
 
 class TestStatusMap:
