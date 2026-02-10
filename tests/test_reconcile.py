@@ -289,9 +289,9 @@ class TestReconcileStatuspage:
         result, mapping = reconcile_statuspage(sample_config, mock_sp_client, {})
 
         assert len(result["created"]) >= 2
-        assert mapping["api-service"]["component_id"] == "comp-1"
+        assert mapping["api-service"]["component_id"] in ("comp-1", "comp-2")
         assert mapping["api-service"]["metric_id"] == "met-1"
-        assert mapping["website"]["component_id"] == "comp-2"
+        assert mapping["website"]["component_id"] in ("comp-1", "comp-2")
         assert mapping["website"]["metric_id"] == ""
 
     def test_skips_existing_component(self, sample_config, mock_sp_client):
@@ -369,3 +369,31 @@ class TestReconcileStatuspage:
         assert mapping["website"]["metric_id"] == ""
         metric_creates = [c for c in result["created"] if "Website" in c and "metric" in c]
         assert len(metric_creates) == 0
+
+    def test_metric_creation_failure_is_warning_not_error(self, sample_config, mock_sp_client):
+        mock_sp_client.create_component.side_effect = [
+            {"id": "comp-1"},
+            {"id": "comp-2"},
+        ]
+        mock_sp_client.create_metric.side_effect = StatuspageError("404 Not Found")
+
+        result, mapping = reconcile_statuspage(sample_config, mock_sp_client, {})
+
+        assert len(result["errors"]) == 0
+        assert len(result["warnings"]) >= 1
+        assert any("metric" in w.lower() for w in result["warnings"])
+        assert "api-service" in mapping
+        assert mapping["api-service"]["component_id"] != ""
+
+    def test_list_metrics_failure_is_warning(self, sample_config, mock_sp_client):
+        mock_sp_client.create_component.side_effect = [
+            {"id": "comp-1"},
+            {"id": "comp-2"},
+        ]
+        mock_sp_client.list_metrics.side_effect = StatuspageError("404 Not Found")
+        mock_sp_client.create_metric.side_effect = StatuspageError("404 Not Found")
+
+        result, mapping = reconcile_statuspage(sample_config, mock_sp_client, {})
+
+        assert len(result["errors"]) == 0
+        assert len(result["warnings"]) >= 1

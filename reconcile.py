@@ -181,7 +181,7 @@ def reconcile_grafana(config, sm_client):
 
 def reconcile_statuspage(config, sp_client, existing_mapping):
     endpoints = config.get("endpoints", {})
-    result = {"created": [], "updated": [], "deleted": [], "errors": []}
+    result = {"created": [], "updated": [], "deleted": [], "errors": [], "warnings": []}
     component_mapping = dict(existing_mapping) if existing_mapping else {}
 
     try:
@@ -193,12 +193,12 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
 
     existing_comp_by_name = {c["name"]: c for c in existing_components}
 
+    existing_metrics = []
     try:
         existing_metrics = sp_client.list_metrics()
     except StatuspageError as e:
-        logger.error("Failed to list Statuspage metrics: %s", e)
-        result["errors"].append(f"List metrics: {e}")
-        return result, component_mapping
+        logger.warning("Failed to list Statuspage metrics (may be unavailable): %s", e)
+        result["warnings"].append(f"List metrics: {e}")
 
     existing_metric_by_name = {m["name"]: m for m in existing_metrics}
 
@@ -252,8 +252,8 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
                     result["created"].append(f"metric:{metric_name}")
                     logger.info("Created Statuspage metric: %s (ID: %s)", metric_name, metric_id)
                 except StatuspageError as e:
-                    logger.error("Failed to create metric %s: %s", metric_name, e)
-                    result["errors"].append(f"Create metric {metric_name}: {e}")
+                    logger.warning("Failed to create metric %s: %s", metric_name, e)
+                    result["warnings"].append(f"Create metric {metric_name}: {e}")
 
         component_mapping[job_label] = {
             "name": name,
@@ -375,10 +375,11 @@ def main() -> int:
         logger.info("Generated %s with %d component mappings", statuspage_path, len(component_mapping))
 
         logger.info(
-            "Statuspage reconciliation: %d created, %d deleted, %d errors",
+            "Statuspage reconciliation: %d created, %d deleted, %d errors, %d warnings",
             len(sp_result["created"]),
             len(sp_result["deleted"]),
             len(sp_result["errors"]),
+            len(sp_result.get("warnings", [])),
         )
     else:
         existing_sp = load_existing_statuspage_config(statuspage_path)
@@ -392,6 +393,10 @@ def main() -> int:
         has_errors = True
     if sp_result and sp_result["errors"]:
         has_errors = True
+
+    if sp_result and sp_result.get("warnings"):
+        for w in sp_result["warnings"]:
+            logger.warning("Non-fatal: %s", w)
 
     if has_errors:
         logger.error("Reconciliation completed with errors")
