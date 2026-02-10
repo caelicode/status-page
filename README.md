@@ -4,6 +4,8 @@ Automated service status page powered by Grafana Cloud (free tier), GitHub Actio
 
 **Live status pages:** [GitHub Pages](https://caelicode.github.io/status-page/) · [Atlassian Statuspage](https://caelicode.statuspage.io/)
 
+**[How-To Guide](HOWTO.md)** — step-by-step instructions for adding endpoints, managing components/metrics, incident settings, and troubleshooting.
+
 ## How it works
 
 ```mermaid
