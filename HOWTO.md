@@ -344,7 +344,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-All 178 tests should pass. Tests use mocks and don't require any API keys or network access.
+All 189 tests should pass. Tests use mocks and don't require any API keys or network access.
 
 ---
 
@@ -376,3 +376,4 @@ Check the GitHub Actions logs for errors. Common issues:
 - Malformed `config.yaml` — validate YAML syntax before pushing.
 - Invalid probe IDs in the `probes` list.
 - Statuspage rate limiting — wait a few minutes and retry.
+- Branch protection blocking push — the reconcile workflow uses a GitHub App token (`APP_ID` + `APP_PRIVATE_KEY`) to push generated configs directly to `main`. The app must be listed as a bypass actor in the branch protection rules (Settings → Branches → Edit → "Allow specified actors to bypass required pull requests" → add the app name). If the `APP_ID` or `APP_PRIVATE_KEY` secrets are missing or incorrect, the token generation step will fail.
