@@ -220,6 +220,10 @@ def process_incidents(
             update_body = generate_incident_body(
                 component_name, current_status, reachability, latency
             )
+            new_impact = STATUS_TO_IMPACT.get(current_status, "minor")
+            old_impact = open_incident.get("impact", "minor")
+            impact_escalated = new_impact != old_impact
+            new_name = generate_incident_name(component_name, current_status)
 
             try:
                 client.update_incident(
@@ -227,16 +231,25 @@ def process_incidents(
                     status="identified",
                     body=update_body,
                     components={component_id: current_status},
-                    deliver_notifications=False,
+                    deliver_notifications=impact_escalated and notify_subscribers,
+                    impact_override=new_impact,
+                    name=new_name,
                 )
-                logger.info(
-                    "Updated incident %s for %s (still %s)",
-                    incident_id, component_name, current_status,
-                )
+                if impact_escalated:
+                    logger.info(
+                        "Escalated incident %s for %s from %s to %s",
+                        incident_id, component_name, old_impact, new_impact,
+                    )
+                else:
+                    logger.info(
+                        "Updated incident %s for %s (still %s)",
+                        incident_id, component_name, current_status,
+                    )
                 result["updated"].append({
                     "component": component_name,
                     "incident_id": incident_id,
                     "status": current_status,
+                    "escalated": impact_escalated,
                 })
             except StatuspageError as e:
                 logger.error("Failed to update incident %s: %s", incident_id, e)
