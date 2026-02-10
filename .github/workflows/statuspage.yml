@@ -11,6 +11,18 @@ on:
       - 'atlassian_statuspage/**'
       - 'config/statuspage.json'
   workflow_dispatch:
+    inputs:
+      manage_command:
+        description: 'Management command (leave empty for normal sync)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - 'sync-components'
+          - 'sync-metrics'
+          - 'list-components'
+          - 'list-metrics'
+          - 'list-incidents'
 
 jobs:
   sync:
@@ -29,7 +41,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Run management command
+        if: ${{ github.event.inputs.manage_command != '' }}
+        env:
+          STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
+        run: python -m atlassian_statuspage.manage ${{ github.event.inputs.manage_command }}
+
       - name: Run monitor
+        if: ${{ github.event.inputs.manage_command == '' }}
         env:
           GRAFANA_PROMETHEUS_URL: ${{ secrets.GRAFANA_PROMETHEUS_URL }}
           GRAFANA_PROMETHEUS_USER_ID: ${{ secrets.GRAFANA_PROMETHEUS_USER_ID }}
@@ -37,6 +56,7 @@ jobs:
         run: python monitor.py
 
       - name: Sync to Statuspage
+        if: ${{ github.event.inputs.manage_command == '' }}
         env:
           STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
         run: python -m atlassian_statuspage.sync

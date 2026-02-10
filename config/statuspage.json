@@ -11,5 +11,10 @@
       "component_id": "c7bv5nftq6cs",
       "metric_id": ""
     }
+  },
+  "incidents": {
+    "auto_create": true,
+    "auto_postmortem": true,
+    "notify_subscribers": true
   }
 }
