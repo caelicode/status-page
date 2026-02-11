@@ -19,6 +19,8 @@ STATUS_TO_IMPACT = {
     "major_outage": "critical",
 }
 
+IMPACT_SEVERITY = {"none": 0, "minor": 1, "major": 2, "critical": 3}
+
 STATUS_DISPLAY = {
     "degraded_performance": "degraded performance",
     "major_outage": "a major outage",
@@ -267,8 +269,14 @@ def process_incidents(
         elif not is_healthy and open_incident is not None:
             incident_id = open_incident["id"]
             new_impact = STATUS_TO_IMPACT.get(current_status, "minor")
-            old_impact = open_incident.get("impact", "minor")
-            impact_escalated = new_impact != old_impact
+            old_impact = (
+                open_incident.get("impact_override")
+                or open_incident.get("impact", "minor")
+            )
+            impact_escalated = (
+                IMPACT_SEVERITY.get(new_impact, 1)
+                > IMPACT_SEVERITY.get(old_impact, 1)
+            )
 
             if not impact_escalated and quiet_period_minutes > 0:
                 last_update_time = get_last_update_time(open_incident)

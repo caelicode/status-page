@@ -363,7 +363,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-All 208 tests should pass. Tests use mocks and don't require any API keys or network access.
+All 216 tests should pass. Tests use mocks and don't require any API keys or network access.
 
 ---
 

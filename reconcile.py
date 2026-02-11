@@ -192,6 +192,7 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
         return result, component_mapping
 
     existing_comp_by_name = {c["name"]: c for c in existing_components}
+    existing_comp_ids = {c["id"] for c in existing_components}
 
     existing_metrics = []
     try:
@@ -201,6 +202,7 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
         result["warnings"].append(f"List metrics: {e}")
 
     existing_metric_by_name = {m["name"]: m for m in existing_metrics}
+    existing_metric_ids = {m["id"] for m in existing_metrics}
 
     desired_jobs = set()
     for job_label, endpoint in endpoints.items():
@@ -217,6 +219,20 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
         current = component_mapping.get(job_label, {})
         comp_id = current.get("component_id", "")
         metric_id = current.get("metric_id", "")
+
+        if comp_id and comp_id not in existing_comp_ids:
+            logger.warning(
+                "Stored component ID %s for %s no longer exists on Statuspage — recreating",
+                comp_id, name,
+            )
+            comp_id = ""
+
+        if metric_id and metric_id not in existing_metric_ids:
+            logger.warning(
+                "Stored metric ID %s for %s no longer exists on Statuspage — recreating",
+                metric_id, name,
+            )
+            metric_id = ""
 
         if not comp_id:
             if name in existing_comp_by_name:

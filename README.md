@@ -273,7 +273,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-The test suite includes 208 tests covering monitoring, Statuspage sync, incident automation, management CLI, Grafana SM registration, and GitOps reconciliation.
+The test suite includes 216 tests covering monitoring, Statuspage sync, incident automation, management CLI, Grafana SM registration, and GitOps reconciliation.
 
 ## Atlassian Statuspage integration (optional)
 

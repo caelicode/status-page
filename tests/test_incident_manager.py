@@ -771,3 +771,142 @@ class TestGenerateHeartbeatBody:
     def test_reassuring_tone(self):
         body = generate_heartbeat_body("API", "degraded_performance")
         assert "monitor" in body.lower() or "working" in body.lower()
+
+
+class TestEscalationDetection:
+
+    @pytest.fixture
+    def mock_client(self):
+        client = MagicMock()
+        client.create_incident.return_value = {"id": "new-inc-1"}
+        client.update_incident.return_value = {}
+        client.resolve_incident.return_value = {}
+        return client
+
+    @pytest.fixture
+    def component_mapping(self):
+        return {
+            "example-api": {
+                "name": "Example API",
+                "component_id": "c1",
+                "metric_id": "",
+            },
+        }
+
+    def test_impact_override_used_over_calculated_impact(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "impact_override": "critical",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert result["updated"] == []
+        assert len(result["suppressed"]) == 1
+        mock_client.update_incident.assert_not_called()
+
+    def test_repeated_major_outage_suppressed_with_impact_override(self, mock_client, component_mapping):
+        old_time = "2025-01-01T00:00:00+00:00"
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "impact_override": "critical",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": old_time, "body": "Update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is False
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert "continue to monitor" in call_kwargs["body"].lower()
+
+    def test_deescalation_not_treated_as_escalation(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "critical",
+                "impact_override": "critical",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert result["updated"] == []
+        assert len(result["suppressed"]) == 1
+        mock_client.update_incident.assert_not_called()
+
+    def test_deescalation_posts_heartbeat_after_quiet_period(self, mock_client, component_mapping):
+        old_time = "2025-01-01T00:00:00+00:00"
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "critical",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": old_time, "body": "Update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is False
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert "continue to monitor" in call_kwargs["body"].lower()
+
+    def test_true_escalation_still_bypasses_quiet_period(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "impact_override": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is True
+        assert result["suppressed"] == []
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert "escalated" in call_kwargs["body"].lower()
