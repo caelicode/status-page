@@ -85,6 +85,38 @@ def generate_update_body(
     )
 
 
+def generate_heartbeat_body(component_name: str, status: str) -> str:
+    if status == "major_outage":
+        return (
+            f"We continue to monitor the situation affecting **{component_name}**. "
+            f"The service remains unavailable. Our team is actively working on a resolution."
+        )
+    if status == "degraded_performance":
+        return (
+            f"We continue to monitor the situation affecting **{component_name}**. "
+            f"The service remains operating with reduced performance. "
+            f"Our team is actively working on a resolution."
+        )
+    return (
+        f"We continue to monitor the situation affecting **{component_name}**. "
+        f"Our team is actively working on a resolution."
+    )
+
+
+def get_last_update_time(incident: dict) -> Optional[datetime]:
+    updates = incident.get("incident_updates", [])
+    if not updates:
+        return None
+    last_update = updates[0]
+    timestamp_str = last_update.get("created_at", "")
+    if not isinstance(timestamp_str, str) or not timestamp_str:
+        return None
+    try:
+        return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+
+
 def generate_resolve_body(component_name: str) -> str:
     return (
         f"This incident has been resolved. **{component_name}** is back to normal "
@@ -163,8 +195,9 @@ def process_incidents(
     auto_incidents: bool = True,
     auto_postmortem: bool = True,
     notify_subscribers: bool = True,
+    quiet_period_minutes: int = 60,
 ) -> dict:
-    result = {"created": [], "updated": [], "resolved": [], "errors": []}
+    result = {"created": [], "updated": [], "resolved": [], "suppressed": [], "errors": []}
 
     if not auto_incidents:
         logger.info("Incident automation is disabled — skipping")
@@ -236,9 +269,30 @@ def process_incidents(
             new_impact = STATUS_TO_IMPACT.get(current_status, "minor")
             old_impact = open_incident.get("impact", "minor")
             impact_escalated = new_impact != old_impact
-            update_body = generate_update_body(
-                component_name, current_status, escalated=impact_escalated
-            )
+
+            if not impact_escalated and quiet_period_minutes > 0:
+                last_update_time = get_last_update_time(open_incident)
+                if last_update_time is not None:
+                    elapsed = (datetime.now(timezone.utc) - last_update_time).total_seconds() / 60
+                    if elapsed < quiet_period_minutes:
+                        logger.info(
+                            "Suppressed duplicate update for incident %s (%s) — "
+                            "%.0f min since last update, quiet period is %d min",
+                            incident_id, component_name, elapsed, quiet_period_minutes,
+                        )
+                        result["suppressed"].append({
+                            "component": component_name,
+                            "incident_id": incident_id,
+                        })
+                        continue
+
+            if impact_escalated:
+                update_body = generate_update_body(
+                    component_name, current_status, escalated=True
+                )
+            else:
+                update_body = generate_heartbeat_body(component_name, current_status)
+
             new_name = generate_incident_name(component_name, current_status)
 
             try:
@@ -258,8 +312,8 @@ def process_incidents(
                     )
                 else:
                     logger.info(
-                        "Updated incident %s for %s (still %s)",
-                        incident_id, component_name, current_status,
+                        "Posted heartbeat for incident %s (%s)",
+                        incident_id, component_name,
                     )
                 result["updated"].append({
                     "component": component_name,

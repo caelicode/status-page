@@ -8,8 +8,10 @@ from atlassian_statuspage.incident_manager import (
     generate_incident_name,
     generate_incident_body,
     generate_update_body,
+    generate_heartbeat_body,
     generate_resolve_body,
     generate_postmortem,
+    get_last_update_time,
     process_incidents,
 )
 
@@ -301,7 +303,8 @@ class TestProcessIncidents:
         ]
         report = make_report(api_status="major_outage")
         result = process_incidents(
-            mock_client, component_mapping, report
+            mock_client, component_mapping, report,
+            quiet_period_minutes=0,
         )
         assert len(result["updated"]) == 1
         assert result["updated"][0]["incident_id"] == "existing-inc"
@@ -345,7 +348,8 @@ class TestProcessIncidents:
         ]
         report = make_report(api_status="degraded_performance")
         result = process_incidents(
-            mock_client, component_mapping, report
+            mock_client, component_mapping, report,
+            quiet_period_minutes=0,
         )
         assert len(result["updated"]) == 1
         assert result["updated"][0]["escalated"] is False
@@ -437,7 +441,7 @@ class TestProcessIncidents:
             mock_client, component_mapping, report,
             auto_incidents=False,
         )
-        assert result == {"created": [], "updated": [], "resolved": [], "errors": []}
+        assert result == {"created": [], "updated": [], "resolved": [], "suppressed": [], "errors": []}
         mock_client.list_unresolved_incidents.assert_not_called()
 
     def test_disabled_postmortem_skips_postmortem(self, mock_client, component_mapping):
@@ -536,3 +540,234 @@ class TestProcessIncidents:
         )
         call_kwargs = mock_client.create_incident.call_args[1]
         assert call_kwargs["deliver_notifications"] is False
+
+    def test_suppresses_duplicate_update_within_quiet_period(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Some update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["suppressed"]) == 1
+        assert result["suppressed"][0]["component"] == "Example API"
+        assert result["updated"] == []
+        mock_client.update_incident.assert_not_called()
+
+    def test_posts_heartbeat_after_quiet_period_elapses(self, mock_client, component_mapping):
+        old_time = "2020-01-01T00:00:00Z"
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": old_time, "body": "Old update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        assert result["suppressed"] == []
+        mock_client.update_incident.assert_called_once()
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert "continue to monitor" in call_kwargs["body"].lower()
+
+    def test_escalation_always_updates_regardless_of_quiet_period(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Recent update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="major_outage")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        assert result["updated"][0]["escalated"] is True
+        assert result["suppressed"] == []
+        mock_client.update_incident.assert_called_once()
+        call_kwargs = mock_client.update_incident.call_args[1]
+        assert "escalated" in call_kwargs["body"].lower()
+
+    def test_quiet_period_zero_disables_suppression(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Recent update"},
+                ],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=0,
+        )
+        assert len(result["updated"]) == 1
+        assert result["suppressed"] == []
+        mock_client.update_incident.assert_called_once()
+
+    def test_suppressed_count_in_result(self, mock_client, component_mapping):
+        recent = datetime.now(timezone.utc).isoformat()
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Update"},
+                ],
+            },
+            {
+                "id": "inc2",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c2"}],
+                "incident_updates": [
+                    {"created_at": recent, "body": "Update"},
+                ],
+            },
+        ]
+        report = make_report(
+            api_status="degraded_performance",
+            web_status="degraded_performance",
+        )
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["suppressed"]) == 2
+        names = {s["component"] for s in result["suppressed"]}
+        assert "Example API" in names
+        assert "Website" in names
+
+    def test_no_incident_updates_falls_through_to_update(self, mock_client, component_mapping):
+        mock_client.list_unresolved_incidents.return_value = [
+            {
+                "id": "inc1",
+                "status": "investigating",
+                "impact": "minor",
+                "components": [{"id": "c1"}],
+                "incident_updates": [],
+            }
+        ]
+        report = make_report(api_status="degraded_performance")
+        result = process_incidents(
+            mock_client, component_mapping, report,
+            quiet_period_minutes=60,
+        )
+        assert len(result["updated"]) == 1
+        mock_client.update_incident.assert_called_once()
+
+
+class TestGetLastUpdateTime:
+
+    def test_returns_timestamp_from_first_update(self):
+        incident = {
+            "incident_updates": [
+                {"created_at": "2026-02-10T12:00:00Z", "body": "Latest"},
+                {"created_at": "2026-02-10T10:00:00Z", "body": "Oldest"},
+            ],
+        }
+        result = get_last_update_time(incident)
+        assert result.year == 2026
+        assert result.month == 2
+        assert result.day == 10
+        assert result.hour == 12
+
+    def test_returns_none_for_empty_updates(self):
+        incident = {"incident_updates": []}
+        assert get_last_update_time(incident) is None
+
+    def test_returns_none_for_missing_key(self):
+        incident = {}
+        assert get_last_update_time(incident) is None
+
+    def test_returns_none_for_malformed_timestamp(self):
+        incident = {
+            "incident_updates": [
+                {"created_at": "not-a-date", "body": "Update"},
+            ],
+        }
+        assert get_last_update_time(incident) is None
+
+    def test_handles_offset_timestamps(self):
+        incident = {
+            "incident_updates": [
+                {"created_at": "2026-02-10T12:00:00+05:00", "body": "Update"},
+            ],
+        }
+        result = get_last_update_time(incident)
+        assert result is not None
+        assert result.hour == 12
+
+    def test_handles_missing_created_at(self):
+        incident = {
+            "incident_updates": [
+                {"body": "No timestamp"},
+            ],
+        }
+        assert get_last_update_time(incident) is None
+
+
+class TestGenerateHeartbeatBody:
+
+    def test_includes_component_name(self):
+        body = generate_heartbeat_body("API Gateway", "degraded_performance")
+        assert "API Gateway" in body
+
+    def test_degraded_mentions_reduced_performance(self):
+        body = generate_heartbeat_body("API", "degraded_performance")
+        assert "reduced performance" in body.lower()
+
+    def test_outage_mentions_unavailable(self):
+        body = generate_heartbeat_body("API", "major_outage")
+        assert "unavailable" in body.lower()
+
+    def test_differs_from_update_body(self):
+        heartbeat = generate_heartbeat_body("API", "degraded_performance")
+        update = generate_update_body("API", "degraded_performance")
+        assert heartbeat != update
+
+    def test_differs_from_escalation_body(self):
+        heartbeat = generate_heartbeat_body("API", "major_outage")
+        escalation = generate_update_body("API", "major_outage", escalated=True)
+        assert heartbeat != escalation
+
+    def test_no_escalation_language(self):
+        body = generate_heartbeat_body("API", "major_outage")
+        assert "escalated" not in body.lower()
+        assert "urgently" not in body.lower()
+
+    def test_reassuring_tone(self):
+        body = generate_heartbeat_body("API", "degraded_performance")
+        assert "monitor" in body.lower() or "working" in body.lower()
