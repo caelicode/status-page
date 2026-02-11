@@ -20,6 +20,7 @@ Practical step-by-step instructions for common operations. For architecture and 
 - [Incidents: Enable/disable automation](#enabledisable-incident-automation)
 - [Incidents: Enable/disable postmortems](#enabledisable-auto-postmortems)
 - [Incidents: Enable/disable subscriber notifications](#enabledisable-subscriber-notifications)
+- [Incidents: Change the update quiet period](#change-the-incident-update-quiet-period)
 - [Workflows: Trigger reconciliation manually](#trigger-reconciliation-manually)
 - [Workflows: Provision infrastructure](#provision-infrastructure)
 - [Workflows: Run monitoring manually](#run-the-monitor-manually)
@@ -294,6 +295,24 @@ Set `notify_subscribers` to `false` to create and resolve incidents silently, wi
 
 ---
 
+## Change the incident update quiet period
+
+In the `incidents` block in `config.yaml`:
+
+```yaml
+incidents:
+  auto_create: true
+  auto_postmortem: true
+  notify_subscribers: true
+  quiet_period_minutes: 60
+```
+
+The `quiet_period_minutes` setting (default 60) controls how often incident updates are posted during prolonged outages. When a component stays degraded or down, duplicate updates are suppressed during the quiet period. After it elapses, a heartbeat update is posted to reassure subscribers the team is still working on it.
+
+Escalations (e.g. degraded → major outage) always post immediately regardless of the quiet period. Set to `0` to disable suppression entirely (every sync run posts an update).
+
+---
+
 ## Trigger reconciliation manually
 
 The Reconcile Infrastructure workflow normally runs automatically after every push to main. To trigger it manually or with deletions enabled:
@@ -344,7 +363,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-All 189 tests should pass. Tests use mocks and don't require any API keys or network access.
+All 208 tests should pass. Tests use mocks and don't require any API keys or network access.
 
 ---
 
