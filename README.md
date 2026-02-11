@@ -162,6 +162,7 @@ incidents:
   auto_resolve: true
   auto_postmortem: true
   notify_subscribers: true
+  quiet_period_minutes: 60
 
 endpoints:
   my-api:
@@ -272,7 +273,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-The test suite includes 189 tests covering monitoring, Statuspage sync, incident automation, management CLI, Grafana SM registration, and GitOps reconciliation.
+The test suite includes 208 tests covering monitoring, Statuspage sync, incident automation, management CLI, Grafana SM registration, and GitOps reconciliation.
 
 ## Atlassian Statuspage integration (optional)
 
@@ -297,7 +298,7 @@ From your Statuspage management dashboard:
 
 ### 4. Configure in config.yaml
 
-Add your page ID to `config/config.yaml`:
+Add your page ID to `config.yaml`:
 
 ```yaml
 statuspage:
@@ -352,7 +353,7 @@ Delete commands (`delete-component`, `delete-metric`, `cleanup`) require a job l
 The sync workflow automatically manages incidents based on status changes:
 
 - **Auto-create**: When a component degrades below operational, an incident is created with the appropriate impact level and affected components. Subscribers are notified.
-- **Auto-update**: While a component remains degraded/down, the incident is updated with current metrics (without re-notifying subscribers).
+- **Auto-update**: While a component remains degraded/down, duplicate updates are suppressed during a configurable quiet period (default 60 minutes). After the quiet period elapses, a heartbeat update is posted. Escalations (e.g. degraded → outage) always post immediately.
 - **Auto-resolve**: When a component returns to operational, the incident is resolved and subscribers are notified.
 - **Auto-postmortem**: After resolution, a postmortem is auto-generated from the incident timeline (summary, timeline, root cause, preventive measures) and published to the status page.
 
@@ -366,7 +367,7 @@ Component status maps to incident impact as follows:
 
 Detection is stateless — each run queries Statuspage for unresolved incidents via `GET /incidents/unresolved` and matches them to components. No local state files needed.
 
-To disable incident automation, set `auto_create: false` in the `incidents` block of `config/config.yaml`. Postmortems can be independently disabled with `auto_postmortem: false`.
+To disable incident automation, set `auto_create: false` in the `incidents` block of `config.yaml`. Postmortems can be independently disabled with `auto_postmortem: false`. The `quiet_period_minutes` setting (default 60) controls how long to suppress duplicate updates before posting a heartbeat — set to `0` to disable suppression.
 
 ### 7. Enable the workflow
 

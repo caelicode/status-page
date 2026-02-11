@@ -17,6 +17,7 @@ incidents:
   auto_resolve: true
   auto_postmortem: true
   notify_subscribers: true
+  quiet_period_minutes: 60
 
 endpoints:
   example-api:

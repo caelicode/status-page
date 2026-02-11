@@ -116,6 +116,7 @@ def main() -> int:
     auto_incidents = incident_settings.get("auto_create", True)
     auto_postmortem = incident_settings.get("auto_postmortem", True)
     notify_subscribers = incident_settings.get("notify_subscribers", True)
+    quiet_period_minutes = incident_settings.get("quiet_period_minutes", 60)
 
     if auto_incidents:
         logger.info("Running incident automation...")
@@ -126,6 +127,7 @@ def main() -> int:
             auto_incidents=auto_incidents,
             auto_postmortem=auto_postmortem,
             notify_subscribers=notify_subscribers,
+            quiet_period_minutes=quiet_period_minutes,
         )
 
         if incident_result["created"]:
@@ -137,6 +139,11 @@ def main() -> int:
             logger.info(
                 "Incidents resolved: %s",
                 ", ".join(i["component"] for i in incident_result["resolved"]),
+            )
+        if incident_result.get("suppressed"):
+            logger.info(
+                "Suppressed duplicate updates: %s",
+                ", ".join(i["component"] for i in incident_result["suppressed"]),
             )
         if incident_result["errors"]:
             logger.warning(
