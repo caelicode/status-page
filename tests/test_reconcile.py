@@ -295,6 +295,12 @@ class TestReconcileStatuspage:
         assert mapping["website"]["metric_id"] == ""
 
     def test_skips_existing_component(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = [
+            {"id": "existing-comp", "name": "API Service", "status": "operational"},
+        ]
+        mock_sp_client.list_metrics.return_value = [
+            {"id": "existing-met", "name": "API Service Latency"},
+        ]
         existing = {
             "api-service": {
                 "name": "API Service",
@@ -321,6 +327,14 @@ class TestReconcileStatuspage:
 
     @patch.dict("os.environ", {"ALLOW_DELETIONS": "true"})
     def test_deletes_orphaned_components(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = [
+            {"id": "c1", "name": "API Service", "status": "operational"},
+            {"id": "c2", "name": "Website", "status": "operational"},
+            {"id": "c-old", "name": "Old Service", "status": "operational"},
+        ]
+        mock_sp_client.list_metrics.return_value = [
+            {"id": "m-old", "name": "Old Service Latency"},
+        ]
         existing = {
             "api-service": {"name": "API Service", "component_id": "c1", "metric_id": ""},
             "website": {"name": "Website", "component_id": "c2", "metric_id": ""},
@@ -336,6 +350,9 @@ class TestReconcileStatuspage:
 
     @patch.dict("os.environ", {"ALLOW_DELETIONS": "false"})
     def test_skips_deletion_when_not_allowed(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = [
+            {"id": "c-old", "name": "Old Service", "status": "operational"},
+        ]
         existing = {
             "old-service": {"name": "Old Service", "component_id": "c-old", "metric_id": ""},
         }
@@ -384,6 +401,64 @@ class TestReconcileStatuspage:
         assert any("metric" in w.lower() for w in result["warnings"])
         assert "api-service" in mapping
         assert mapping["api-service"]["component_id"] != ""
+
+    def test_recreates_deleted_component(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = []
+        mock_sp_client.create_component.return_value = {"id": "new-comp"}
+        existing = {
+            "api-service": {
+                "name": "API Service",
+                "component_id": "stale-id",
+                "metric_id": "",
+            },
+        }
+
+        result, mapping = reconcile_statuspage(sample_config, mock_sp_client, existing)
+
+        assert mapping["api-service"]["component_id"] == "new-comp"
+        assert any("API Service" in c for c in result["created"])
+
+    def test_recreates_deleted_metric(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = [
+            {"id": "valid-comp", "name": "API Service", "status": "operational"},
+        ]
+        mock_sp_client.list_metrics.return_value = []
+        mock_sp_client.create_metric.return_value = {"id": "new-met"}
+        existing = {
+            "api-service": {
+                "name": "API Service",
+                "component_id": "valid-comp",
+                "metric_id": "stale-met-id",
+            },
+        }
+
+        result, mapping = reconcile_statuspage(sample_config, mock_sp_client, existing)
+
+        assert mapping["api-service"]["component_id"] == "valid-comp"
+        assert mapping["api-service"]["metric_id"] == "new-met"
+        assert any("metric" in c.lower() for c in result["created"])
+
+    def test_adopts_by_name_when_stored_id_deleted(self, sample_config, mock_sp_client):
+        mock_sp_client.list_components.return_value = [
+            {"id": "adopted-id", "name": "API Service", "status": "operational"},
+        ]
+        mock_sp_client.create_component.return_value = {"id": "new-comp"}
+        existing = {
+            "api-service": {
+                "name": "API Service",
+                "component_id": "stale-id",
+                "metric_id": "",
+            },
+        }
+
+        result, mapping = reconcile_statuspage(sample_config, mock_sp_client, existing)
+
+        assert mapping["api-service"]["component_id"] == "adopted-id"
+        create_calls = [
+            c for c in mock_sp_client.create_component.call_args_list
+            if c[1].get("name") == "API Service"
+        ]
+        assert len(create_calls) == 0
 
     def test_list_metrics_failure_is_warning(self, sample_config, mock_sp_client):
         mock_sp_client.create_component.side_effect = [
