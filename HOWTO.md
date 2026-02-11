@@ -108,11 +108,11 @@ settings:
       operational: 95
       degraded: 75
     latency_ms:
-      operational: 200
-      degraded: 1000
+      operational: 1000
+      degraded: 3000
 ```
 
-These are global defaults. A component is `operational` when reachability >= 95% AND latency <= 200ms. It becomes `degraded_performance` when either drops below operational but stays above degraded thresholds. Below both, it's `major_outage`.
+These are global defaults. A component is `operational` when reachability >= 95% AND latency <= 1000ms. It becomes `degraded_performance` when either drops below operational but stays above degraded thresholds. Below both, it's `major_outage`.
 
 Commit and push. Changes apply on the next monitoring run (within 5 minutes).
 
@@ -134,11 +134,11 @@ endpoints:
     metric: false
     thresholds:
       latency_ms:
-        operational: 500
-        degraded: 2000
+        operational: 2000
+        degraded: 5000
 ```
 
-Only the thresholds you specify are overridden. In this example, latency uses 500ms/2000ms while reachability inherits the global 95%/75%.
+Only the thresholds you specify are overridden. In this example, latency uses 2000ms/5000ms while reachability inherits the global 95%/75%.
 
 ---
 

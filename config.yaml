@@ -9,8 +9,8 @@ settings:
       operational: 95
       degraded: 75
     latency_ms:
-      operational: 200
-      degraded: 1000
+      operational: 1000
+      degraded: 3000
 
 incidents:
   auto_create: true
@@ -28,6 +28,10 @@ endpoints:
     probes: [1, 2, 3]
     component: true
     metric: true
+    thresholds:
+      latency_ms:
+        operational: 1500
+        degraded: 3000
 
   caelicode-com:
     name: "caelicode.com"
@@ -38,9 +42,6 @@ endpoints:
     component: true
     metric: true
     thresholds:
-      reachability:
-        operational: 95
-        degraded: 75
       latency_ms:
-        operational: 2000
+        operational: 3000
         degraded: 5000

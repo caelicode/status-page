@@ -154,8 +154,8 @@ settings:
       operational: 95
       degraded: 75
     latency_ms:
-      operational: 200
-      degraded: 1000
+      operational: 1000
+      degraded: 3000
 
 incidents:
   auto_create: true
@@ -184,8 +184,8 @@ endpoints:
     metric: true
     thresholds:
       latency_ms:
-        operational: 500
-        degraded: 2000
+        operational: 2000
+        degraded: 5000
 ```
 
 Per-endpoint thresholds are optional. When provided, they override the global thresholds for that endpoint only. Set `component: true` to sync to Statuspage, and `metric: true` to track latency metrics.
@@ -262,7 +262,7 @@ Rather than tracking consecutive failures (which needs persistent state between 
 | Metric | Operational | Degraded | Major Outage |
 |--------|-------------|----------|--------------|
 | Reachability | >= 95% | >= 75% | < 75% |
-| Latency | <= 200ms | <= 1000ms | > 1000ms |
+| Latency | <= 1000ms | <= 3000ms | > 3000ms |
 
 The worst of reachability and latency determines the component status. The worst component determines overall status. If either metric is unavailable (Prometheus returns no data), the component conservatively defaults to `major_outage`.
 
