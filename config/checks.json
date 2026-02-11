@@ -8,8 +8,8 @@
         "degraded": 75
       },
       "latency_ms": {
-        "operational": 200,
-        "degraded": 1000
+        "operational": 1000,
+        "degraded": 3000
       }
     }
   },
@@ -18,7 +18,13 @@
       "name": "Example API",
       "job_label": "example-api",
       "url": "https://httpbin.org/get",
-      "description": "Example endpoint \u2014 replace with your own"
+      "description": "Example endpoint \u2014 replace with your own",
+      "thresholds": {
+        "latency_ms": {
+          "operational": 1500,
+          "degraded": 3000
+        }
+      }
     },
     {
       "name": "caelicode.com",
@@ -26,12 +32,8 @@
       "url": "https://caelicode.com",
       "description": "CaeliCode Solutions website",
       "thresholds": {
-        "reachability": {
-          "operational": 95,
-          "degraded": 75
-        },
         "latency_ms": {
-          "operational": 2000,
+          "operational": 3000,
           "degraded": 5000
         }
       }
