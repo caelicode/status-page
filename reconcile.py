@@ -113,7 +113,7 @@ def reconcile_grafana(config, sm_client):
             continue
 
         frequency = endpoint.get("frequency", 60000)
-        probes = endpoint.get("probes", [1, 2, 3])
+        probes = endpoint.get("probes")
         headers = endpoint.get("headers", [])
 
         if job_label in existing_jobs:

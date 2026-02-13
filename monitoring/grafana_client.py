@@ -190,6 +190,34 @@ class SyntheticMonitoringClient:
         if self._access_token is None:
             raise GrafanaClientError("Must call register() first")
 
+    def list_probes(self) -> list:
+        self._ensure_registered()
+
+        try:
+            response = self._session.get(
+                f"{self.config.synthetic_monitoring_url}/api/v1/probe/list",
+                headers={
+                    "Authorization": f"Bearer {self._access_token}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+
+        except requests.RequestException as e:
+            raise GrafanaClientError(f"Failed to list probes: {e}") from e
+
+    def get_default_probe_ids(self, count: int = 3) -> list:
+        probes = self.list_probes()
+        public_probes = [
+            p for p in probes
+            if not p.get("public", True) is False
+        ]
+        if not public_probes:
+            public_probes = probes
+        return [p["id"] for p in public_probes[:count]]
+
     def list_checks(self) -> list:
         self._ensure_registered()
 
@@ -252,7 +280,7 @@ class SyntheticMonitoringClient:
         self._ensure_registered()
 
         if probe_ids is None:
-            probe_ids = [1, 2, 3]
+            probe_ids = self.get_default_probe_ids()
 
         settings = {"http": {"method": "GET", "validStatusCodes": [200]}}
         if headers:
@@ -302,7 +330,7 @@ class SyntheticMonitoringClient:
         self._ensure_registered()
 
         if probe_ids is None:
-            probe_ids = [1, 2, 3]
+            probe_ids = self.get_default_probe_ids()
 
         if self.check_exists(job_name):
             logger.info("Check '%s' already exists — skipping", job_name)
