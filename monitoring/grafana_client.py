@@ -108,16 +108,17 @@ class SyntheticMonitoringClient:
                 timeout=30,
             )
             if probe.status_code == 200:
-                self._access_token = self.config.synthetic_monitoring_token
                 checks = probe.json()
                 if isinstance(checks, list) and checks:
+                    self._access_token = self.config.synthetic_monitoring_token
                     self._tenant_id = checks[0].get("tenantId", 0)
-                else:
-                    self._tenant_id = 0
+                    logger.info(
+                        "Using existing SM access token (tenant: %s)", self._tenant_id
+                    )
+                    return self._access_token, self._tenant_id
                 logger.info(
-                    "Using existing SM access token (tenant: %s)", self._tenant_id
+                    "SM token valid but no checks exist — registering to get tenant ID"
                 )
-                return self._access_token, self._tenant_id
         except requests.RequestException:
             pass
 

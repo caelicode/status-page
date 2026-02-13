@@ -39,18 +39,27 @@ class TestSMRegister:
         assert client._tenant_id == 42
         mock_get.assert_called_once()
 
-    def test_uses_existing_token_empty_checks(self, grafana_config):
+    def test_empty_checks_falls_through_to_install(self, grafana_config):
         client = SyntheticMonitoringClient(grafana_config)
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = []
+        list_response = MagicMock()
+        list_response.status_code = 200
+        list_response.json.return_value = []
 
-        with patch.object(client._session, "get", return_value=mock_response):
+        install_response = MagicMock()
+        install_response.status_code = 200
+        install_response.raise_for_status = MagicMock()
+        install_response.json.return_value = {
+            "accessToken": "registered-token",
+            "tenantInfo": {"id": 77},
+        }
+
+        with patch.object(client._session, "get", return_value=list_response), \
+             patch.object(client._session, "post", return_value=install_response):
             token, tenant = client.register()
 
-        assert token == "fake-sm-token"
-        assert tenant == 0
+        assert token == "registered-token"
+        assert tenant == 77
 
     def test_falls_back_to_install_when_list_fails(self, grafana_config):
         client = SyntheticMonitoringClient(grafana_config)
