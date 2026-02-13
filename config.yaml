@@ -25,7 +25,6 @@ endpoints:
     url: "https://httpbin.org/get"
     description: "Example endpoint — replace with your own"
     frequency: 60000
-    probes: [1, 2, 3]
     component: true
     metric: true
     thresholds:
@@ -38,7 +37,6 @@ endpoints:
     url: "https://caelicode.com"
     description: "CaeliCode Solutions website"
     frequency: 300000
-    probes: [1, 2, 3]
     component: true
     metric: true
     thresholds:
