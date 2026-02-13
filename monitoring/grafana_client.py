@@ -210,13 +210,15 @@ class SyntheticMonitoringClient:
 
     def get_default_probe_ids(self, count: int = 3) -> list:
         probes = self.list_probes()
-        public_probes = [
-            p for p in probes
-            if not p.get("public", True) is False
-        ]
+        public_probes = [p for p in probes if p.get("public") is True]
         if not public_probes:
             public_probes = probes
-        return [p["id"] for p in public_probes[:count]]
+        selected = [p["id"] for p in public_probes[:count]]
+        logger.info(
+            "Resolved %d probe IDs from %d total (%d public): %s",
+            len(selected), len(probes), len(public_probes), selected,
+        )
+        return selected
 
     def list_checks(self) -> list:
         self._ensure_registered()

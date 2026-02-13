@@ -121,8 +121,9 @@ def reconcile_grafana(config, sm_client):
             needs_update = (
                 existing.get("target") != url
                 or existing.get("frequency") != frequency
-                or sorted(existing.get("probes", [])) != sorted(probes)
             )
+            if probes is not None:
+                needs_update = needs_update or sorted(existing.get("probes", [])) != sorted(probes)
 
             if needs_update:
                 try:
