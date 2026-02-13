@@ -97,30 +97,64 @@ class SyntheticMonitoringClient:
         self._access_token: Optional[str] = None
         self._tenant_id: Optional[int] = None
 
-    def register(self) -> Tuple[str, int]:
+    def _get_tenant_id(self, token: str) -> Optional[int]:
         try:
-            probe = self._session.get(
-                f"{self.config.synthetic_monitoring_url}/api/v1/check/list",
+            resp = self._session.get(
+                f"{self.config.synthetic_monitoring_url}/api/v1/tenant",
                 headers={
-                    "Authorization": f"Bearer {self.config.synthetic_monitoring_token}",
+                    "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
                 timeout=30,
             )
-            if probe.status_code == 200:
-                checks = probe.json()
-                if isinstance(checks, list) and checks:
-                    self._access_token = self.config.synthetic_monitoring_token
-                    self._tenant_id = checks[0].get("tenantId", 0)
-                    logger.info(
-                        "Using existing SM access token (tenant: %s)", self._tenant_id
-                    )
-                    return self._access_token, self._tenant_id
-                logger.info(
-                    "SM token valid but no checks exist — registering to get tenant ID"
-                )
+            if resp.status_code == 200:
+                data = resp.json()
+                tenant_id = data.get("id", 0)
+                if tenant_id:
+                    return tenant_id
         except requests.RequestException:
             pass
+        return None
+
+    def register(self) -> Tuple[str, int]:
+        sm_token = self.config.synthetic_monitoring_token
+        if sm_token:
+            try:
+                probe = self._session.get(
+                    f"{self.config.synthetic_monitoring_url}/api/v1/check/list",
+                    headers={
+                        "Authorization": f"Bearer {sm_token}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=30,
+                )
+                if probe.status_code == 200:
+                    checks = probe.json()
+                    if isinstance(checks, list) and checks:
+                        self._access_token = sm_token
+                        self._tenant_id = checks[0].get("tenantId", 0)
+                        logger.info(
+                            "Using existing SM access token (tenant: %s)",
+                            self._tenant_id,
+                        )
+                        return self._access_token, self._tenant_id
+
+                    tenant_id = self._get_tenant_id(sm_token)
+                    if tenant_id:
+                        self._access_token = sm_token
+                        self._tenant_id = tenant_id
+                        logger.info(
+                            "Resolved tenant ID %s via /api/v1/tenant",
+                            self._tenant_id,
+                        )
+                        return self._access_token, self._tenant_id
+
+                    logger.info(
+                        "SM token valid but could not resolve tenant ID — "
+                        "falling back to /register/install"
+                    )
+            except requests.RequestException:
+                pass
 
         try:
             response = self._session.post(

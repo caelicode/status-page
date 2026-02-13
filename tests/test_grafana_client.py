@@ -39,27 +39,61 @@ class TestSMRegister:
         assert client._tenant_id == 42
         mock_get.assert_called_once()
 
-    def test_empty_checks_falls_through_to_install(self, grafana_config):
+    def test_empty_checks_resolves_tenant_via_api(self, grafana_config):
         client = SyntheticMonitoringClient(grafana_config)
 
         list_response = MagicMock()
         list_response.status_code = 200
         list_response.json.return_value = []
 
+        tenant_response = MagicMock()
+        tenant_response.status_code = 200
+        tenant_response.json.return_value = {"id": 77, "stackId": 100}
+
+        def route_get(url, **kwargs):
+            if "/check/list" in url:
+                return list_response
+            if "/tenant" in url:
+                return tenant_response
+            return MagicMock(status_code=404)
+
+        with patch.object(client._session, "get", side_effect=route_get):
+            token, tenant = client.register()
+
+        assert token == "fake-sm-token"
+        assert tenant == 77
+
+    def test_empty_checks_falls_through_to_install_when_tenant_fails(self, grafana_config):
+        client = SyntheticMonitoringClient(grafana_config)
+
+        list_response = MagicMock()
+        list_response.status_code = 200
+        list_response.json.return_value = []
+
+        tenant_response = MagicMock()
+        tenant_response.status_code = 401
+
+        def route_get(url, **kwargs):
+            if "/check/list" in url:
+                return list_response
+            if "/tenant" in url:
+                return tenant_response
+            return MagicMock(status_code=404)
+
         install_response = MagicMock()
         install_response.status_code = 200
         install_response.raise_for_status = MagicMock()
         install_response.json.return_value = {
             "accessToken": "registered-token",
-            "tenantInfo": {"id": 77},
+            "tenantInfo": {"id": 88},
         }
 
-        with patch.object(client._session, "get", return_value=list_response), \
+        with patch.object(client._session, "get", side_effect=route_get), \
              patch.object(client._session, "post", return_value=install_response) as mock_post:
             token, tenant = client.register()
 
         assert token == "registered-token"
-        assert tenant == 77
+        assert tenant == 88
         call_headers = mock_post.call_args[1].get("headers", {})
         assert call_headers["Authorization"] == f"Bearer {grafana_config.api_key}"
 
