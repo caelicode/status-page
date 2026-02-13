@@ -55,11 +55,13 @@ class TestSMRegister:
         }
 
         with patch.object(client._session, "get", return_value=list_response), \
-             patch.object(client._session, "post", return_value=install_response):
+             patch.object(client._session, "post", return_value=install_response) as mock_post:
             token, tenant = client.register()
 
         assert token == "registered-token"
         assert tenant == 77
+        call_headers = mock_post.call_args[1].get("headers", {})
+        assert call_headers["Authorization"] == f"Bearer {grafana_config.api_key}"
 
     def test_falls_back_to_install_when_list_fails(self, grafana_config):
         client = SyntheticMonitoringClient(grafana_config)
@@ -76,11 +78,13 @@ class TestSMRegister:
         }
 
         with patch.object(client._session, "get", return_value=probe_response), \
-             patch.object(client._session, "post", return_value=install_response):
+             patch.object(client._session, "post", return_value=install_response) as mock_post:
             token, tenant = client.register()
 
         assert token == "new-access-token"
         assert tenant == 99
+        call_headers = mock_post.call_args[1].get("headers", {})
+        assert call_headers["Authorization"] == f"Bearer {grafana_config.api_key}"
 
     def test_falls_back_to_install_when_list_errors(self, grafana_config):
         client = SyntheticMonitoringClient(grafana_config)
