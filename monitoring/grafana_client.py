@@ -274,6 +274,9 @@ class SyntheticMonitoringClient:
                     "frequency": frequency_ms,
                     "timeout": timeout_ms,
                     "enabled": True,
+                    "alertSensitivity": "none",
+                    "basicMetricsOnly": True,
+                    "labels": [],
                     "settings": settings,
                 },
                 timeout=30,
@@ -324,10 +327,19 @@ class SyntheticMonitoringClient:
                     "frequency": frequency_ms,
                     "timeout": timeout_ms,
                     "enabled": True,
+                    "alertSensitivity": "none",
+                    "basicMetricsOnly": True,
+                    "labels": [],
                     "settings": settings,
                 },
                 timeout=30,
             )
+            if response.status_code >= 400:
+                logger.error(
+                    "Check add response (%s): %s",
+                    response.status_code,
+                    response.text[:500],
+                )
             response.raise_for_status()
             logger.info("Created check: %s", job_name)
             return job_name
