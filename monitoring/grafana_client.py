@@ -126,7 +126,7 @@ class SyntheticMonitoringClient:
             response = self._session.post(
                 f"{self.config.synthetic_monitoring_url}/api/v1/register/install",
                 headers={
-                    "Authorization": f"Bearer {self.config.synthetic_monitoring_token}",
+                    "Authorization": f"Bearer {self.config.api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
