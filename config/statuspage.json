@@ -1,11 +1,6 @@
 {
   "page_id": "w7y1d1jrz920",
   "component_mapping": {
-    "example-api": {
-      "name": "Example API",
-      "component_id": "7ynjjx5vg7v8",
-      "metric_id": ""
-    },
     "caelicode-com": {
       "name": "caelicode.com",
       "component_id": "c7bv5nftq6cs",
