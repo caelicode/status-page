@@ -15,18 +15,6 @@
   },
   "checks": [
     {
-      "name": "Example API",
-      "job_label": "example-api",
-      "url": "https://httpbin.org/get",
-      "description": "Example endpoint \u2014 replace with your own",
-      "thresholds": {
-        "latency_ms": {
-          "operational": 1500,
-          "degraded": 3000
-        }
-      }
-    },
-    {
       "name": "caelicode.com",
       "job_label": "caelicode-com",
       "url": "https://caelicode.com",
