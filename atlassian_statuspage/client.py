@@ -115,6 +115,46 @@ class StatuspageClient:
                 f"Failed to delete component {component_id}: {e}"
             ) from e
 
+    # ── Metrics Providers ─────────────────────────────────────────────
+
+    def list_metrics_providers(self) -> list:
+        try:
+            response = self._session.get(
+                self._url("metrics_providers"), timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise StatuspageError(f"Failed to list metrics providers: {e}") from e
+
+    def create_metrics_provider(self, provider_type: str = "Self") -> dict:
+        try:
+            response = self._session.post(
+                self._url("metrics_providers"),
+                json={
+                    "metrics_provider": {
+                        "type": provider_type,
+                    }
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            raise StatuspageError(
+                f"Failed to create metrics provider '{provider_type}': {e}"
+            ) from e
+
+    def get_or_create_self_provider(self) -> str:
+        providers = self.list_metrics_providers()
+        for p in providers:
+            if p.get("type") == "Self":
+                return p["id"]
+        created = self.create_metrics_provider("Self")
+        return created["id"]
+
+    # ── Metrics ──────────────────────────────────────────────────────
+
     def list_metrics(self) -> list:
         try:
             response = self._session.get(self._url("metrics"), timeout=30)
@@ -125,6 +165,7 @@ class StatuspageClient:
 
     def create_metric(
         self,
+        metrics_provider_id: str,
         name: str,
         suffix: str = "ms",
         tooltip: str = "",
@@ -133,7 +174,9 @@ class StatuspageClient:
     ) -> dict:
         try:
             response = self._session.post(
-                self._url("metrics"),
+                self._url(
+                    f"metrics_providers/{metrics_provider_id}/metrics"
+                ),
                 json={
                     "metric": {
                         "name": name,

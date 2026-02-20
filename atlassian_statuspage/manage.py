@@ -135,6 +135,14 @@ def cmd_sync_metrics(args):
 
     existing_by_name = {m["name"]: m for m in existing}
 
+    # Get or create a Self metrics provider (required for API-created metrics)
+    try:
+        self_provider_id = client.get_or_create_self_provider()
+        logger.info("Using Self metrics provider: %s", self_provider_id)
+    except StatuspageError as e:
+        logger.error("Failed to get/create Self metrics provider: %s", e)
+        return 1
+
     created_count = 0
     skipped_count = 0
 
@@ -157,6 +165,7 @@ def cmd_sync_metrics(args):
 
         try:
             result = client.create_metric(
+                metrics_provider_id=self_provider_id,
                 name=metric_name,
                 suffix="ms",
                 tooltip=f"Average response time for {name}",

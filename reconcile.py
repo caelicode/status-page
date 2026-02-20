@@ -205,6 +205,20 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
     existing_metric_by_name = {m["name"]: m for m in existing_metrics}
     existing_metric_ids = {m["id"] for m in existing_metrics}
 
+    # Resolve the Self metrics provider ID (needed to create metrics via API)
+    self_provider_id = None
+    any_wants_metric = any(
+        ep.get("metric", True) for ep in endpoints.values()
+        if ep.get("component", True)
+    )
+    if any_wants_metric:
+        try:
+            self_provider_id = sp_client.get_or_create_self_provider()
+            logger.info("Using Self metrics provider: %s", self_provider_id)
+        except StatuspageError as e:
+            logger.warning("Failed to get/create Self metrics provider: %s", e)
+            result["warnings"].append(f"Metrics provider: {e}")
+
     desired_jobs = set()
     for job_label, endpoint in endpoints.items():
         if endpoint.get("component", True):
@@ -258,9 +272,10 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
             if metric_name in existing_metric_by_name:
                 metric_id = existing_metric_by_name[metric_name]["id"]
                 logger.info("Adopted existing Statuspage metric: %s (ID: %s)", metric_name, metric_id)
-            else:
+            elif self_provider_id:
                 try:
                     created = sp_client.create_metric(
+                        metrics_provider_id=self_provider_id,
                         name=metric_name,
                         suffix="ms",
                         tooltip=f"Average response time for {name}",
@@ -271,6 +286,14 @@ def reconcile_statuspage(config, sp_client, existing_mapping):
                 except StatuspageError as e:
                     logger.warning("Failed to create metric %s: %s", metric_name, e)
                     result["warnings"].append(f"Create metric {metric_name}: {e}")
+            else:
+                logger.warning(
+                    "Cannot create metric %s — no Self metrics provider available",
+                    metric_name,
+                )
+                result["warnings"].append(
+                    f"Skipped metric {metric_name}: no Self provider"
+                )
 
         component_mapping[job_label] = {
             "name": name,
