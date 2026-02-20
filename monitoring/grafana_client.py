@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional, Tuple
 
 import requests
@@ -248,7 +249,7 @@ class SyntheticMonitoringClient:
                 return True
         return False
 
-    def delete_check(self, check_id: int) -> None:
+    def delete_check(self, check_id: int, verify: bool = True) -> None:
         self._ensure_registered()
 
         try:
@@ -261,13 +262,46 @@ class SyntheticMonitoringClient:
                 json={"tenantId": self._tenant_id, "id": check_id},
                 timeout=30,
             )
+            if response.status_code >= 400:
+                logger.error(
+                    "Check delete response (%s): %s",
+                    response.status_code,
+                    response.text[:500],
+                )
             response.raise_for_status()
-            logger.info("Deleted check ID: %s", check_id)
+
+            resp_body = response.text[:500] if response.text else "(empty)"
+            logger.info(
+                "Delete API returned %s for check ID %s: %s",
+                response.status_code, check_id, resp_body,
+            )
 
         except requests.RequestException as e:
             raise GrafanaClientError(
                 f"Failed to delete check {check_id}: {e}"
             ) from e
+
+        if not verify:
+            return
+
+        for attempt in range(1, 4):
+            time.sleep(2 * attempt)
+            remaining = self.list_checks()
+            remaining_ids = {c.get("id") for c in remaining}
+            if check_id not in remaining_ids:
+                logger.info(
+                    "Verified check ID %s deleted (attempt %d)", check_id, attempt,
+                )
+                return
+            logger.warning(
+                "Check ID %s still present after delete (attempt %d/3)",
+                check_id, attempt,
+            )
+
+        raise GrafanaClientError(
+            f"Check {check_id} still exists after deletion - "
+            f"API returned success but check was not removed"
+        )
 
     def update_check(
         self,
