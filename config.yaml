@@ -20,18 +20,6 @@ incidents:
   quiet_period_minutes: 60
 
 endpoints:
-  example-api:
-    name: "Example API"
-    url: "https://httpbin.org/get"
-    description: "Example endpoint — replace with your own"
-    frequency: 60000
-    component: true
-    metric: true
-    thresholds:
-      latency_ms:
-        operational: 1500
-        degraded: 3000
-
   caelicode-com:
     name: "caelicode.com"
     url: "https://caelicode.com"
