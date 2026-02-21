@@ -24,18 +24,22 @@ on:
           - 'list-metrics'
           - 'list-incidents'
 
-permissions:
-  contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -56,8 +60,8 @@ jobs:
         if: ${{ github.event.inputs.manage_command == 'sync-components' || github.event.inputs.manage_command == 'sync-metrics' }}
         run: |
           git diff --quiet config/statuspage.json && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "caelicode-org-manager[bot]"
+          git config user.email "caelicode-org-manager[bot]@users.noreply.github.com"
           git add config/statuspage.json
           git commit -m "chore: update statuspage config from ${{ github.event.inputs.manage_command }}"
           git push
