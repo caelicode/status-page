@@ -1,0 +1,31 @@
+# Security scanning — auto-deployed by CaeliCode org security policy.
+# Calls the reusable workflow from caelicode/.github.
+# Do not edit manually; changes will be overwritten on next deployment.
+
+name: Security Scan
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+  schedule:
+    - cron: '25 4 * * 1'  # Weekly Monday 04:25 UTC
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  security:
+    uses: caelicode/.github/.github/workflows/reusable-security-scan.yml@main
+    with:
+      languages: '["python"]'
+      enable-codeql: true
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+      pull-requests: write
