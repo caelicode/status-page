@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   security:
-    uses: caelicode/.github/.github/workflows/reusable-security-scan.yml@40b283653faba193c1c1e42b11f59054a5e8c916 # main
+    uses: caelicode/.github/.github/workflows/reusable-security-scan.yml@11c65281ba4b4372911cfa332cde68e38075099f # main
     secrets: inherit
     with:
       languages: '["python"]'
