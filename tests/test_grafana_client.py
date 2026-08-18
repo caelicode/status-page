@@ -190,3 +190,52 @@ class TestSMEnsureRegistered:
         client._access_token = "token"
         client._tenant_id = 0
         client._ensure_registered()
+
+
+class TestSMCheckPayload:
+
+    def test_create_check_uses_get_and_custom_headers(self, grafana_config):
+        client = SyntheticMonitoringClient(grafana_config)
+        client._access_token = "token"
+        client._tenant_id = 42
+        user_agent = "User-Agent: Mozilla/5.0"
+
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"id": 100}
+
+        with patch.object(client, "check_exists", return_value=False), \
+             patch.object(client._session, "post", return_value=response) as mock_post:
+            client.create_check(
+                job_name="website",
+                target_url="https://example.com",
+                probe_ids=[1, 2],
+                headers=[user_agent],
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["settings"]["http"]["method"] == "GET"
+        assert payload["settings"]["http"]["headers"] == [user_agent]
+
+    def test_update_check_uses_get_and_custom_headers(self, grafana_config):
+        client = SyntheticMonitoringClient(grafana_config)
+        client._access_token = "token"
+        client._tenant_id = 42
+        user_agent = "User-Agent: Mozilla/5.0"
+
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"id": 100}
+
+        with patch.object(client._session, "post", return_value=response) as mock_post:
+            client.update_check(
+                check_id=100,
+                job_name="website",
+                target_url="https://example.com",
+                probe_ids=[1, 2],
+                headers=[user_agent],
+            )
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["settings"]["http"]["method"] == "GET"
+        assert payload["settings"]["http"]["headers"] == [user_agent]

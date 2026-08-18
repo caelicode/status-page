@@ -190,6 +190,7 @@ class TestReconcileGrafana:
                 "target": "https://api.example.com/health",
                 "frequency": 60000,
                 "probes": [1, 2, 3],
+                "settings": {"http": {"method": "GET"}},
             },
         ]
 
@@ -231,6 +232,65 @@ class TestReconcileGrafana:
 
         result = reconcile_grafana(sample_config, mock_sm_client)
         assert "api-service" in result["updated"]
+
+    def test_updates_check_when_method_is_not_get(self, sample_config, mock_sm_client):
+        mock_sm_client.list_checks.return_value = [
+            {
+                "id": 100,
+                "job": "api-service",
+                "target": "https://api.example.com/health",
+                "frequency": 60000,
+                "probes": [1, 2, 3],
+                "settings": {"http": {"method": "HEAD"}},
+            },
+        ]
+
+        result = reconcile_grafana(sample_config, mock_sm_client)
+
+        assert "api-service" in result["updated"]
+        mock_sm_client.update_check.assert_called_once()
+
+    def test_updates_check_when_headers_changed(self, sample_config, mock_sm_client):
+        user_agent = (
+            "User-Agent: Mozilla/5.0 (compatible; CaeliCodeStatus/1.0; "
+            "+https://status.caelicode.com)"
+        )
+        sample_config["endpoints"]["api-service"]["headers"] = [user_agent]
+        mock_sm_client.list_checks.return_value = [
+            {
+                "id": 100,
+                "job": "api-service",
+                "target": "https://api.example.com/health",
+                "frequency": 60000,
+                "probes": [1, 2, 3],
+                "settings": {"http": {"method": "GET"}},
+            },
+        ]
+
+        result = reconcile_grafana(sample_config, mock_sm_client)
+
+        assert "api-service" in result["updated"]
+        call_kwargs = mock_sm_client.update_check.call_args[1]
+        assert call_kwargs["headers"] == [user_agent]
+
+    def test_skips_update_when_headers_match(self, sample_config, mock_sm_client):
+        user_agent = "User-Agent: Mozilla/5.0"
+        sample_config["endpoints"]["api-service"]["headers"] = [user_agent]
+        mock_sm_client.list_checks.return_value = [
+            {
+                "id": 100,
+                "job": "api-service",
+                "target": "https://api.example.com/health",
+                "frequency": 60000,
+                "probes": [1, 2, 3],
+                "settings": {"http": {"method": "GET", "headers": [user_agent]}},
+            },
+        ]
+
+        result = reconcile_grafana(sample_config, mock_sm_client)
+
+        assert "api-service" not in result["updated"]
+        mock_sm_client.update_check.assert_not_called()
 
     @patch.dict("os.environ", {"ALLOW_DELETIONS": "true"})
     def test_deletes_orphaned_checks(self, sample_config, mock_sm_client):

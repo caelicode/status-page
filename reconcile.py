@@ -118,9 +118,14 @@ def reconcile_grafana(config, sm_client):
 
         if job_label in existing_jobs:
             existing = existing_by_job[job_label]
+            existing_settings = existing.get("settings") or {}
+            existing_http_settings = existing_settings.get("http") or {}
+            existing_headers = existing_http_settings.get("headers") or []
             needs_update = (
                 existing.get("target") != url
                 or existing.get("frequency") != frequency
+                or existing_http_settings.get("method") != "GET"
+                or sorted(existing_headers) != sorted(headers)
             )
             if probes is not None:
                 needs_update = needs_update or sorted(existing.get("probes", [])) != sorted(probes)
